@@ -1,4 +1,5 @@
 import {db} from './db.ts';
+import {publicCalendar} from './public-calendar.ts';
 import {rankings,type Player} from '../../lib/tournament.ts';
 import {defaultRules} from '../../lib/public-rules.ts';
 import {vacancies,todayLuanda} from './substitutions.ts';
@@ -11,7 +12,7 @@ export async function queryTournament(playerId:string,q:Query){
  const matches=people.filter(p=>(division==='all'||p.division===division)&&p.name.toLocaleLowerCase().includes(q.name.toLocaleLowerCase()));
  const page=(rows:unknown[])=>({total:rows.length,offset:q.offset,items:rows.slice(q.offset,q.offset+50),hasMore:rows.length>q.offset+50});
  if(q.topic==='players')return page(matches.map(({id,...p})=>({...p,isYou:id===playerId})));
- if(q.topic==='rules'){const row=await db.setting.findUnique({where:{key:'public-rules'}});return row?JSON.parse(row.value).rules:defaultRules;}
+ if(q.topic==='rules'){const row=await db.setting.findUnique({where:{key:'public-rules'}});return {rules:row?JSON.parse(row.value).rules:defaultRules,weeklyCalendar:await publicCalendar()};}
  if(q.topic==='courts')return page(await db.court.findMany({where:{active:true},select:{name:true,location:true}}));
  if(q.topic==='competition'){const row=await db.setting.findUnique({where:{key:'competition:status'}});return row?JSON.parse(row.value):{status:'Ainda não definido'};}
  if(q.topic==='substitutions')return page((await vacancies()).filter(v=>(division==='all'||v.division===division)&&v.status==='pending').map(v=>({name:v.name,division:v.division,side:v.side,round:v.round,date:v.date,status:v.status,candidates:v.candidates.map(id=>people.find(p=>p.id===id)?.name??'Jogador')})));

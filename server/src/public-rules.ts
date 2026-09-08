@@ -2,9 +2,10 @@ import type {Express,RequestHandler} from 'express';
 import {z} from 'zod';
 import {db} from './db.ts';
 import {defaultRules} from '../../lib/public-rules.ts';
+import {publicCalendar} from './public-calendar.ts';
 const schema=z.object({version:z.number().int().nonnegative(),rules:z.object({title:z.string().trim().min(1).max(150),intro:z.string().trim().max(500),sections:z.array(z.object({title:z.string().trim().min(1).max(150),text:z.string().trim().min(1).max(8000)})).min(1).max(30)})});
 export function installRules(app:Express,auth:RequestHandler,admin:RequestHandler){
- app.get('/api/rules',async(_req,res)=>{const row=await db.setting.findUnique({where:{key:'public-rules'}});res.set('Cache-Control','no-store').json(row?JSON.parse(row.value):{version:0,rules:defaultRules});});
+ app.get('/api/rules',async(_req,res)=>{const row=await db.setting.findUnique({where:{key:'public-rules'}});res.set('Cache-Control','no-store').json({...row?JSON.parse(row.value):{version:0,rules:defaultRules},calendar:await publicCalendar()});});
  app.put('/api/admin/rules',auth,admin,async(req,res)=>{
   const input=schema.parse(req.body);
   const result=await db.$transaction(async tx=>{

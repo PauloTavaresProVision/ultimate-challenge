@@ -11,6 +11,7 @@ try{
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','escada-app','300']);containerCreated=true;
  docker(['cp','server/src/public-rules.ts',container+':/app/server/src/public-rules.ts']);
+ docker(['cp','server/src/public-calendar.ts',container+':/app/server/src/public-calendar.ts']);
  docker(['cp','lib/public-rules.ts',container+':/app/lib/public-rules.ts']);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],`

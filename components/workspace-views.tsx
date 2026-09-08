@@ -1,6 +1,7 @@
 'use client';
 import { weeklySchedule } from '@/lib/tournament';
 import Substitutions from './substitutions';
+import RulesEditor from './rules-editor';
 import OpenAISettings from './openai-settings';
 import CompetitionLive from './competition-live';
 import {
@@ -175,6 +176,7 @@ export default function WorkspaceViews({
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
+  const [settingsTab,setSettingsTab]=useState('general');
   const month = live ? new Date().toISOString().slice(0, 7) : '2026-09';
   const monthEnd = new Date(
     Number(month.slice(0, 4)),
@@ -1043,6 +1045,9 @@ export default function WorkspaceViews({
       )}
       {view === 'Configurações' && (
         <>
+          {live && <div className="message-filters" role="group" aria-label="Separadores das configurações"><Button variant={settingsTab==='general'?'default':'outline'} onClick={()=>setSettingsTab('general')}>Geral</Button><Button variant={settingsTab==='rules'?'default':'outline'} onClick={()=>setSettingsTab('rules')}>Regras</Button></div>}
+          {live && settingsTab==='rules' && <RulesEditor />}
+          <div hidden={live && settingsTab!=='general'}>
           {live && <OpenAISettings />}
           <section className="panel">
             <div className="section-heading">
@@ -1052,7 +1057,7 @@ export default function WorkspaceViews({
             <div className="rules-grid">
               {[
                 ['Divisões', 'M1+, M1 e M2'],
-                ['Frequência', '1 jogo por semana'],
+                ['Frequência', '4 jogos de 20 minutos por semana'],
                 ['Vitória', '3 pontos'],
                 ['Derrota', '1 ponto'],
                 [
@@ -1076,6 +1081,7 @@ export default function WorkspaceViews({
             </div>
           </section>
           {live && <CompetitionLive />}
+          </div>
         </>
       )}
       <Dialog

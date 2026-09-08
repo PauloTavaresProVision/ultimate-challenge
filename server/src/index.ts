@@ -1,3 +1,4 @@
+import { installRules } from './public-rules.ts';
 import { installSubstitutions, vacancies } from './substitutions.ts';
 import { installInviteSending } from './invite-sending.ts';
 import { installOpenAI } from './openai-settings.ts';
@@ -449,6 +450,7 @@ await db.outbox.updateMany({
   where: { status: 'sending' },
   data: { status: 'uncertain' },
 });
+installRules(app, auth, admin);
 installSubstitutions(app, auth, admin);
 installAdminState(app, auth, admin, wa, snapshot);
 installOpenAI(app, auth, admin);

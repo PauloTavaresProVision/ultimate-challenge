@@ -291,14 +291,15 @@ async function sendCode(playerId: string) {
 }
 app.post('/api/code', async (req, res) => {
   await limited(`code:${req.ip}`, 10);
-  if (wa.status !== 'connected')
-    fail(503, 'WhatsApp desligado. Tenta mais tarde.');
   const { phone } = z
     .object({ phone: z.string().regex(/^\+[1-9]\d{7,14}$/) })
     .parse(req.body);
   await limited(`phone:${digest(phone)}`, 3, 600);
   const p = await db.player.findUnique({ where: { phone } });
-  if (p) await sendCode(p.id);
+  if (!p) fail(404, 'Número não registado. Pede um convite à organização para fazer a inscrição.');
+  if (wa.status !== 'connected')
+    fail(503, 'WhatsApp desligado. Tenta mais tarde.');
+  await sendCode(p!.id);
   res.json({ ok: true });
 });
 app.post('/api/verify', async (req, res) => {

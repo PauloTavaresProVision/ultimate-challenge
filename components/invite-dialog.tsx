@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { api } from './whatsapp-live';
 const countries=[['ao','Angola','244'],['pt','Portugal','351'],['br','Brasil','55'],['mx','México','52'],['ae','Emirados Árabes Unidos / Dubai','971'],['mz','Moçambique','258'],['cv','Cabo Verde','238'],['za','África do Sul','27'],['es','Espanha','34'],['fr','França','33'],['gb','Reino Unido','44'],['us','Estados Unidos','1']];
 const labels:Record<string,string>={read:'Lido',delivered:'Entregue ao destinatário',accepted:'Aceite pelo servidor WhatsApp — aguarda entrega',pending:'Pendente',sending:'A enviar',sent:'Enviado ao WhatsApp — entrega não confirmada',uncertain:'Sem confirmação — verifica no WhatsApp',expired:'Expirado',cancelled:'Cancelado',failed:'Falhou'};
-type Row={id:string;phone:string;status:string};
+type Row={id:string;phone:string;status:string;errorCode?:string|null};
 export default function InviteDialog({connected}:{connected:boolean}){
  const [open,setOpen]=useState(false),[country,setCountry]=useState('244'),[numbers,setNumbers]=useState(''),[message,setMessage]=useState('Olá! Estás convidado a participar no Ultimate Challenge, no Premier Padel Club. Preenche a tua inscrição através deste link:'),[batch,setBatch]=useState(''),[rows,setRows]=useState<Row[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const entries=numbers.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
@@ -23,6 +23,6 @@ export default function InviteDialog({connected}:{connected:boolean}){
  {!!invalid.length&&<p role="alert" className="form-error">Revê os números: {invalid.join(', ')}</p>}{phones.length>50&&<p className="form-error">Envia no máximo 50 convites de cada vez.</p>}
  {!connected&&<p className="form-error">Liga o WhatsApp antes de enviar.</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  <div className="dialog-actions"><Button type="submit" disabled={busy||!connected||!phones.length||!!invalid.length||phones.length>50||!message.trim()}><Send size={16}/>{busy?'A preparar…':batch?'Verificar / repetir pedido':'Enviar '+phones.length+' convite(s)'}</Button></div>
- </form> : <><p role="status">Convites preparados. Acompanha o envio abaixo.</p><ul className="invite-status">{rows.map(r=><li key={r.id}><strong>{r.phone}</strong><span>{labels[r.status]??r.status}</span></li>)}</ul>{error&&<p role="alert" className="form-error">{error}</p>}<Button variant="outline" onClick={()=>{setRows([]);setBatch('');setNumbers('');setError('');}}>Novo envio</Button></>}
+ </form> : <><p role="status">Convites preparados. Acompanha o envio abaixo.</p><ul className="invite-status">{rows.map(r=><li key={r.id}><strong>{r.phone}</strong><span>{labels[r.status]??r.status}{r.errorCode ? ` · Código WhatsApp ${r.errorCode}` : ""}</span></li>)}</ul>{error&&<p role="alert" className="form-error">{error}</p>}<Button variant="outline" onClick={()=>{setRows([]);setBatch('');setNumbers('');setError('');}}>Novo envio</Button></>}
  </DialogContent></Dialog></>;
 }

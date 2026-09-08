@@ -44,7 +44,8 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
           status = code >= 4 ? 'read' : code === 3 ? 'delivered' : code === 2 ? 'accepted' : code === 0 ? 'failed' : status;
         }
       }
-      return {...r,status};
+      const failure = message && status === 'failed' ? await db.setting.findUnique({where:{key:'wa-receipt-error:'+message.value}}) : null;
+      return {...r,status,errorCode:failure?.value??null};
     }));
     res.json(result);
   });

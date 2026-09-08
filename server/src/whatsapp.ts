@@ -1,4 +1,5 @@
 import { handleAI, botEnabled } from './ai-bot.ts';
+import { nextReceipt } from './whatsapp-receipts.ts';
 import { handleParticipation, participationIntent } from './substitutions.ts';
 import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
@@ -34,6 +35,19 @@ export class WhatsApp {
   qr: string | null = null;
   lastError: string | null = null;
   private seen = new Map<string, number>();
+  private async recordReceipt(id: string, status: number, error?: string) {
+    await db.$transaction(async tx => {
+      const key = `wa-receipt:${id}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      const previous = await tx.setting.findUnique({where:{key}});
+      const value = String(nextReceipt(previous ? Number(previous.value) : null, status));
+      await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
+      if (error && /^\d{1,6}$/.test(error)) {
+        const errorKey = `wa-receipt-error:${id}`;
+        await tx.setting.upsert({where:{key:errorKey},create:{key:errorKey,value:error},update:{value:error}});
+      }
+    });
+  }
   connectedAt: string | null = null;
   get account() {
     const user = this.socket?.user;
@@ -48,10 +62,14 @@ export class WhatsApp {
     try {
       const result = await this.socket.sendMessage(row.recipient, { text });
       if (!result?.key.id) throw new Error('Envio sem confirmação.');
+      await db.setting.upsert({where:{key:`outbox-message:${row.id}`},create:{key:`outbox-message:${row.id}`,value:result.key.id},update:{value:result.key.id}});
+      console.info('WhatsApp teste:', row.id, result.key.id);
       const sentAt=new Date();
       await db.outbox.update({where:{id:row.id},data:{status:'sent',sentAt}});
       return { sentAt: sentAt.toISOString() };
     } catch(e) {
+      const code = (e as { output?: {statusCode?:number} })?.output?.statusCode;
+      console.error('Falha no teste WhatsApp:', row.id, typeof code === 'number' ? code : 'sem código');
       await db.outbox.update({where:{id:row.id},data:{status:'uncertain'}});
       throw e;
     }
@@ -91,19 +109,22 @@ export class WhatsApp {
         shouldSyncHistoryMessage: () => false,
       });
       this.socket = sock;
+      sock.ws.on('CB:ack,class:message', (node: {attrs: Record<string,string>}) => {
+        if (generation !== this.generation || !node.attrs.id) return;
+        const {id, error} = node.attrs;
+        // Baileys only emits messages.update for bad ACKs, not successful ACKs.
+        void this.recordReceipt(id, error ? 0 : 2, error)
+          .catch(() => console.error('Não foi possível guardar a resposta do servidor WhatsApp.'));
+        console.info('WhatsApp ACK:', id, error && /^\d{1,6}$/.test(error) ? `rejeitado ${error}` : error ? 'rejeitado' : 'aceite');
+      });
       sock.ev.on('messages.update', updates => {
         if (generation !== this.generation) return;
         for (const {key, update} of updates) {
           if (!key.fromMe || !key.id || !key.remoteJid?.endsWith('@s.whatsapp.net') && !key.remoteJid?.endsWith('@lid')) continue;
           const status = update.status;
           if (status == null || ![0, 2, 3, 4, 5].includes(status)) continue;
-          void db.$transaction(async tx => {
-            const receiptKey = `wa-receipt:${key.id}`;
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${receiptKey}))`;
-            const previous = await tx.setting.findUnique({where:{key:receiptKey}});
-            if (previous && Number(previous.value) >= status) return;
-            await tx.setting.upsert({where:{key:receiptKey},create:{key:receiptKey,value:String(status)},update:{value:String(status)}});
-          }).catch(() => console.error('Não foi possível guardar a confirmação WhatsApp.'));
+          void this.recordReceipt(key.id, status, update.messageStubParameters?.[0])
+            .catch(() => console.error('Não foi possível guardar a confirmação WhatsApp.'));
         }
       });
       sock.ev.on('creds.update', () => {

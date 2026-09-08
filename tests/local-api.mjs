@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { parse } from '../server/node_modules/dotenv/lib/main.js';
-const env = parse(readFileSync(new URL('../deploy/.env', import.meta.url)));
+import { execFileSync } from 'node:child_process';
+// Use Compose's own parser: dotenv interprets unquoted # differently.
+// Keep the full configuration in memory; never print its secrets.
+const env = JSON.parse(execFileSync('docker', [
+  'compose', '--env-file', 'deploy/.env', '-f', 'deploy/compose.yaml',
+  'config', '--format', 'json',
+], { encoding: 'utf8' })).services.app.environment;
 const origin = env.APP_ORIGIN;
 assert.equal(
   origin,

@@ -148,11 +148,11 @@ export default function Backoffice({
   const [revision, setRevision] = useState(liveState?.revision ?? 0);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState('');
-  async function save() {
+  async function save(nextPlayers?: Player[], nextAudit?: string[]) {
     if (!onSave) return;
     setSaving(true);
     try {
-      const saved = await onSave({ players, courts, games, audit, revision });
+      const saved = await onSave({ players: nextPlayers ?? players, courts, games, audit: nextAudit ?? audit, revision });
       setPlayers(saved.players);
       setCourts(saved.courts);
       setGames(saved.games);
@@ -161,6 +161,7 @@ export default function Backoffice({
       setSaveNote('Alterações guardadas na base de dados.');
     } catch (e) {
       setSaveNote((e as Error).message);
+      if (nextPlayers) throw e;
     } finally {
       setSaving(false);
     }
@@ -233,7 +234,7 @@ export default function Backoffice({
                   variant="outline"
                   className="primary-action"
                   disabled={saving}
-                  onClick={save}
+                  onClick={() => void save()}
                 >
                   {saving ? 'A guardar…' : 'Guardar alterações'}
                 </Button>
@@ -518,6 +519,8 @@ export default function Backoffice({
             <WhatsAppLive />
           ) : (
             <WorkspaceViews
+              saving={saving}
+              onSavePlayers={onSave ? save : undefined}
               live={!!liveState}
               audit={audit}
               setAudit={setAudit}

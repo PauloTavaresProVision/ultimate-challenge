@@ -79,6 +79,8 @@ import {
   type Division,
 } from '@/lib/tournament';
 type Props = {
+  saving?: boolean;
+  onSavePlayers?: (players: Player[], audit: string[]) => Promise<void>;
   live?: boolean;
   audit: string[];
   setAudit: Dispatch<SetStateAction<string[]>>;
@@ -158,6 +160,8 @@ export default function WorkspaceViews({
   live = false,
   audit,
   setAudit,
+  saving,
+  onSavePlayers,
   view,
   division,
   players,
@@ -225,7 +229,8 @@ export default function WorkspaceViews({
       (status === 'Todos' ||
         (status === 'Confirmados' ? !!g.winner : !g.winner)),
   );
-  function playerAction(action: 'save' | 'approve' | 'reject') {
+  async function playerAction(action: 'save' | 'approve' | 'reject') {
+    if (saving) return;
     if (!editPlayer) return;
     const p = {
       ...editPlayer,
@@ -265,6 +270,16 @@ export default function WorkspaceViews({
     if (action === 'approve') p.status = 'Ativo';
     if (action === 'reject') p.status = 'Rejeitado';
     if (!p.id) p.id = crypto.randomUUID();
+    if (live && onSavePlayers) {
+      const next = players.some(x => x.id === p.id) ? players.map(x => x.id === p.id ? p : x) : [...players,p];
+      const entry = `${p.name}: ${action === 'approve' ? 'inscrição aprovada' : action === 'reject' ? 'inscrição rejeitada' : 'dados guardados'}.`;
+      try {
+        await onSavePlayers(next,[entry,...audit]);
+        setEditPlayer(null);
+        setNotice(action === 'approve' ? 'Inscrição aprovada. Pedido de entrada no grupo colocado na fila do WhatsApp.' : action === 'reject' ? 'Inscrição rejeitada e guardada.' : 'Dados do jogador guardados.');
+      } catch(e) { setError((e as Error).message); }
+      return;
+    }
     setPlayers((list) =>
       list.some((x) => x.id === p.id)
         ? list.map((x) => (x.id === p.id ? p : x))
@@ -1089,6 +1104,7 @@ export default function WorkspaceViews({
       <Dialog
         open={!!editPlayer}
         onOpenChange={(open) => {
+          if (saving) return;
           if (!open) {
             setEditPlayer(null);
             setError('');
@@ -1207,20 +1223,21 @@ export default function WorkspaceViews({
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={saving}
                       onClick={() => playerAction('reject')}
                     >
                       Rejeitar
                     </Button>
                     <Button
                       type="button"
-                      disabled={!editPlayer.verified}
+                      disabled={saving || !editPlayer.verified}
                       onClick={() => playerAction('approve')}
                     >
-                      <Check size={16} /> Aprovar entrada
+                      <Check size={16} /> {saving ? 'A guardar…' : 'Aprovar entrada'}
                     </Button>
                   </>
                 )}
-                <Button type="submit" variant="outline">
+                <Button type="submit" variant="outline" disabled={saving}>
                   Guardar dados
                 </Button>
               </div>

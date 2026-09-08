@@ -342,7 +342,7 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
     where: { key: 'whatsapp_group' },
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
-  res.json({ status: wa.status, lastError: wa.lastError, qr: wa.qr, groupId: group?.value ?? null,
+  res.json({ status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
     groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
 });
@@ -356,7 +356,7 @@ app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
   try {
     res.json(await wa.sendTest(phone, message));
   } catch {
-    fail(502, 'Não foi possível confirmar o envio. Verifica a receção no telemóvel antes de repetir.');
+    fail(wa.sendingPausedReason ? 409 : 502, wa.sendingPausedReason ?? 'Não foi possível confirmar o envio. Verifica o estado da mensagem antes de repetir.');
   }
 });
 app.post('/api/admin/whatsapp/connect', auth, admin, async (_req, res) => {

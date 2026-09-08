@@ -1,4 +1,5 @@
 import { handleAI, botEnabled } from './ai-bot.ts';
+import { SendGate } from './whatsapp-send-gate.ts';
 import './signal-log-redaction.ts';
 import { resolveRecipient } from './whatsapp-recipient.ts';
 import { nextReceipt } from './whatsapp-receipts.ts';
@@ -21,6 +22,13 @@ import { db } from './db.ts';
 import { decrypt, phoneFromJid } from './security.ts';
 const logger = pino({ level: 'silent' });
 export class WhatsApp {
+  private gate = new SendGate();
+  get sendingPausedReason() { return this.gate.reason; }
+  private async canSend() {
+    const sock = this.socket;
+    if (!sock || this.status !== 'connected') return false;
+    return await this.gate.allowed(() => sock.fetchAccountReachoutTimelock()) && this.socket === sock && this.status === 'connected';
+  }
   private socket: WASocket | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private enabled = false;
@@ -81,6 +89,7 @@ export class WhatsApp {
   async sendTest(phone: string, text: string) {
     if (!this.socket || this.status !== 'connected')
       throw new Error('Liga o WhatsApp antes de enviar o teste.');
+    if (!await this.canSend()) throw new Error(this.gate.reason ?? 'Envios em espera.');
     const row=await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
     try {
       const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
@@ -130,12 +139,14 @@ export class WhatsApp {
         logger,
         markOnlineOnConnect: false,
         syncFullHistory: false,
-        shouldSyncHistoryMessage: () => false,
+        // Use Baileys' default incremental history processing: it also persists
+        // contact privacy tokens and PN/LID mappings. Full history stays disabled.
       });
       this.socket = sock;
       sock.ws.on('CB:ack,class:message', (node: {attrs: Record<string,string>}) => {
         if (generation !== this.generation || !node.attrs.id) return;
         const {id, error} = node.attrs;
+        if (error === '463') this.gate.reject();
         // Baileys only emits messages.update for bad ACKs, not successful ACKs.
         void this.recordReceipt(id, error ? 0 : 2, error)
           .catch(() => console.error('Não foi possível guardar a resposta do servidor WhatsApp.'));
@@ -168,6 +179,7 @@ export class WhatsApp {
           this.status = 'qr';
         }
         if (update.connection === 'open') {
+          this.gate = new SendGate();
           this.connectedAt = new Date().toISOString();
           this.status = 'connected';
           this.lastError = null;
@@ -316,6 +328,7 @@ export class WhatsApp {
       where: { key: 'whatsapp_group' },
     });
     if (!group || chat !== group.value || !this.socket) return;
+    if (!await this.canSend()) return;
     let phone =
       phoneFromJid(jidNormalizedUser(sender)) ?? phoneFromJid(alternate);
     if (!phone && sender.endsWith('@lid')) {
@@ -352,6 +365,7 @@ export class WhatsApp {
     if (this.sending || this.status !== 'connected' || !this.socket) return;
     this.sending = true;
     try {
+      if (!await this.canSend()) return;
       const row = await db.outbox.findFirst({
         where: {
           status: 'pending',

@@ -1,4 +1,6 @@
 import { handleAI, botEnabled } from './ai-bot.ts';
+import './signal-log-redaction.ts';
+import { resolveRecipient } from './whatsapp-recipient.ts';
 import { nextReceipt } from './whatsapp-receipts.ts';
 import { handleParticipation, participationIntent } from './substitutions.ts';
 import { queueWelcome } from './welcome.ts';
@@ -60,7 +62,8 @@ export class WhatsApp {
       throw new Error('Liga o WhatsApp antes de enviar o teste.');
     const row=await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
     try {
-      const result = await this.socket.sendMessage(row.recipient, { text });
+      const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
+      const result = await this.socket.sendMessage(recipient, { text });
       if (!result?.key.id) throw new Error('Envio sem confirmação.');
       await db.setting.upsert({where:{key:`outbox-message:${row.id}`},create:{key:`outbox-message:${row.id}`,value:result.key.id},update:{value:result.key.id}});
       console.info('WhatsApp teste:', row.id, result.key.id);
@@ -355,11 +358,15 @@ export class WhatsApp {
           }
           const outcome=await joinApprovedPlayer(this.socket,payload.group,row.recipient);
           if(outcome==='added')await queueWelcome(payload.group,[row.recipient]);
-          if(outcome==='invite')await this.socket.sendMessage(row.recipient,{text:payload.text});
+          if(outcome==='invite') {
+            const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
+            await this.socket.sendMessage(recipient,{text:payload.text});
+          }
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;
         }
-        const result = await this.socket.sendMessage(row.recipient, {
+        const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
+        const result = await this.socket.sendMessage(recipient, {
           text: decrypt(row.encryptedBody, config.MESSAGE_KEY),
         });
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');

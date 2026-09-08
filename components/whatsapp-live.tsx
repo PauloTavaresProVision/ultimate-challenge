@@ -1,3 +1,4 @@
+import InviteDialog from './invite-dialog';
 import MessageCenter from './message-center';
 import { useEffect, useState } from 'react';
 import { MessageCircle, Smartphone, Users, RefreshCw, Send, Link2, Copy, Check, ArrowUpRight, Unplug, QrCode } from 'lucide-react';
@@ -99,7 +100,7 @@ export default function WhatsAppLive() {
         </form>
       </section>
     </div>
-    <section className="wa-invite"><div className="wa-icon"><Link2 size={20} /></div><div className="wa-invite-copy"><h2>Inscrições por convite</h2><p>Um link por jogador, válido durante 7 dias. A entrada continua sujeita à tua aprovação.</p></div><Button variant="outline" disabled={!!busy} onClick={async () => { setBusy('invite'); setError(''); try { setNote((await api<{url: string}>('/admin/invites', 'POST')).url); setCopied(false); } catch(e) { setError((e as Error).message); } finally { setBusy(''); } }}><Link2 size={15} />Criar convite</Button>
+    <section className="wa-invite"><div className="wa-icon"><Link2 size={20} /></div><div className="wa-invite-copy"><h2>Inscrições por convite</h2><p>Um link por jogador, válido durante 7 dias. A entrada continua sujeita à tua aprovação.</p></div><InviteDialog connected={connected}/>
       {note && <div className="wa-invite-link"><a href={note}>{note}</a><Button variant="outline" onClick={() => navigator.clipboard.writeText(note).then(() => setCopied(true)).catch(() => setError('Seleciona e copia o link manualmente.'))}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copiado' : 'Copiar link'}</Button></div>}
     </section>
     <MessageCenter />

@@ -1,3 +1,4 @@
+import { installInviteSending } from './invite-sending.ts';
 import { installOpenAI } from './openai-settings.ts';
 import express from 'express';
 import { syncEnvironmentAdmin } from './admin-bootstrap.ts';
@@ -189,6 +190,7 @@ app.get('/api/me', auth, (_req, res) => {
 app.get('/api/admin/state', auth, admin, async (_req, res) =>
   res.json(await snapshot()),
 );
+installInviteSending(app, auth, admin, () => wa.status === 'connected');
 app.post('/api/admin/invites', auth, admin, async (_req, res) => {
   const token = randomToken();
   await db.invite.create({
@@ -230,6 +232,8 @@ app.post('/api/register', async (req, res) => {
     const invite = await tx.invite.findUnique({ where: { tokenHash: token } });
     if (!invite || invite.usedAt || invite.expiresAt < new Date())
       fail(400, 'Convite inválido ou expirado.');
+    const target = await tx.setting.findUnique({where:{key:'invite-target:'+token}});
+    if(target && target.value !== input.phone) fail(400, 'Este convite foi enviado para outro número de WhatsApp.');
     const claimed = await tx.invite.updateMany({
       where: { id: invite.id, usedAt: null },
       data: { usedAt: new Date() },

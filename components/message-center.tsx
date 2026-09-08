@@ -6,7 +6,7 @@ import { api } from './whatsapp-live';
 type Delivery={mode:'immediate'|'scheduled';hoursBefore:number};
 type Message={id:string;kind:string;status:string;attempts:number;createdAt:string;sentAt:string|null;nextAttemptAt:string;expiresAt:string};
 const labels:Record<string,string>={pending:'Pendente',sending:'A enviar',sent:'Enviada',uncertain:'Sem confirmação',expired:'Expirada',cancelled:'Cancelada'};
-const kinds:Record<string,string>={test:'Teste de ligação',round:'Jogos do torneio',approval:'Convite para o grupo',otp:'Código de validação',verification:'Código de validação'};
+const kinds:Record<string,string>={invitation:'Convite de inscrição',test:'Teste de ligação',round:'Jogos do torneio',approval:'Convite para o grupo',otp:'Código de validação',verification:'Código de validação'};
 const date=(v:string)=>new Date(v).toLocaleString('pt-PT',{timeZone:'Africa/Luanda',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 export default function MessageCenter(){
  const [setting,setSetting]=useState<Delivery|null>(null);const [messages,setMessages]=useState<Message[]>([]);const [error,setError]=useState('');const [note,setNote]=useState('');const [busy,setBusy]=useState('');const [filter,setFilter]=useState('all');

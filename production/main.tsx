@@ -152,8 +152,8 @@ function App() {
     );
   return (
     <main className="auth-page auth-redesign">
+      <header className="auth-brand-header"><div className="ultimate-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div></header>
       <aside className="auth-brand" aria-label="Ultimate Challenge">
-        <div className="ultimate-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
         <div className="auth-court" aria-hidden="true"><i /><b /></div>
         <div className="auth-brand-caption"><span>PREMIER PADEL CLUB</span><strong>O teu próximo<br />desafio começa aqui.</strong><p>M1+ <span>·</span> M1 <span>·</span> M2</p></div>
       </aside>

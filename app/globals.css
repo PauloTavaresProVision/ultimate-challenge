@@ -2132,3 +2132,19 @@ h1 {
   background: #fff;
   padding: 28px max(24px, calc((100% - 912px) / 2));
 }
+
+/* Give the original logo a full-width white masthead on every access screen. */
+.auth-redesign { grid-template-rows: auto 1fr; }
+.auth-brand-header {
+  grid-column: 1 / -1;
+  background: #fff;
+  padding: 24px 48px;
+  border-bottom: 1px solid #e6edf1;
+}
+.auth-brand-header .ultimate-logo { width: 220px; max-width: 100%; }
+.auth-redesign .auth-brand { min-height: 0; justify-content: flex-end; }
+@media (max-width: 760px) {
+  .auth-brand-header { padding: 20px 24px; }
+  .auth-brand-header .ultimate-logo { width: 200px; margin: 0 auto; }
+  .auth-redesign .auth-brand-caption { padding-top: 0; }
+}

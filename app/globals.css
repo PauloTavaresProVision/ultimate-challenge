@@ -2148,3 +2148,19 @@ h1 {
   .auth-brand-header .ultimate-logo { width: 200px; margin: 0 auto; }
   .auth-redesign .auth-brand-caption { padding-top: 0; }
 }
+/* Visible, keyboard-accessible weekly calendar selection. */
+.calendar-days { border: 0; padding: 0; margin: 28px 0; min-width: 0; }
+.calendar-days legend { font-size: 20px; font-weight: 700; color: #143b50; }
+.calendar-days > p { margin: 8px 0 16px; }
+.calendar-day-options { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 10px; }
+.calendar-day { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 88px; padding: 12px 6px; border: 2px solid #cad6dd; border-radius: 12px; background: white; color: #143b50; font-weight: 600; cursor: pointer; }
+.calendar-day input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.calendar-day:focus-within { outline: 3px solid #7999aa; outline-offset: 3px; }
+.calendar-day:hover { border-color: #143b50; }
+.calendar-day.is-selected { background: #143b50; color: white; border-color: #143b50; }
+.calendar-day-mark { font-size: 22px; line-height: 1; }
+.calendar-day.is-selected .calendar-day-mark { color: #d0f64b; }
+.calendar-days:disabled .calendar-day { opacity: .6; cursor: wait; }
+.calendar-days .calendar-day-summary { color: #143b50; font-weight: 600; margin-top: 16px; }
+@media(max-width: 1100px) { .calendar-day-options { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media(max-width: 480px) { .calendar-day-options { grid-template-columns: repeat(2,minmax(0,1fr)); } }

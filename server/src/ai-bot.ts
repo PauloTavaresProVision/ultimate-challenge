@@ -1,53 +1,39 @@
+import {converse,type Turn} from './tournament-assistant.ts';
+import {queryTournament} from './tournament-queries.ts';
 import type {Express,RequestHandler} from 'express';
 import {z} from 'zod';
 import {db} from './db.ts';
 import {config} from './config.ts';
 import {decrypt,encrypt,digest} from './security.ts';
-import {rankings,type Player} from '../../lib/tournament.ts';
-import {defaultRules,type PublicRules} from '../../lib/public-rules.ts';
-import {todayLuanda,vacancies} from './substitutions.ts';
-import {classifyQuestion} from './bot-intent.ts';
+import {todayLuanda} from './substitutions.ts';
 import {mentionedReply} from './bot-message.ts';
-import {rosterReply} from './bot-roster.ts';
 export async function botEnabled(){return (await db.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false';}
 async function budget(playerId:string){
  const hour=new Date().toISOString().slice(0,13),minute=new Date().toISOString().slice(0,16);
  for(const [key,limit] of [['bot-hour:'+hour,60],['bot-user:'+playerId+':'+minute,4]] as const){const row=await db.rateLimit.upsert({where:{key},create:{key,count:1,expiresAt:new Date(Date.now()+7200000)},update:{count:{increment:1}}});if(row.count>limit)throw Error('Limite de perguntas atingido. Aguarda antes de tentar novamente.');}
 }
-export async function answerQuestion(playerId:string,text:string,classifier=classifyQuestion){
- const player=await db.player.findUnique({where:{id:playerId}});if(!player||!player.verified||player.status!=='Ativo')throw Error('Seleciona um jogador aprovado e validado.');
- const key=await db.setting.findUnique({where:{key:'openai_key'}});if(!key)throw Error('Configura primeiro a chave OpenAI.');
- await budget(playerId);
- const saved=await db.setting.findUnique({where:{key:'public-rules'}});const rules:PublicRules=saved?JSON.parse(saved.value).rules:defaultRules;
- const intent=await classifier(decrypt(key.value,config.MESSAGE_KEY),text,rules.sections.map(s=>s.title));
- const today=todayLuanda(),origin=config.APP_ORIGIN.replace(/\/$/,'');
- if(intent.intent==='silent')return null;
- if(intent.intent==='schedule_notice')return 'Sim! Assim que tivermos a data e os horários definidos, comunicamos aqui no grupo com antecedência.';
- if(intent.intent==='clarify')return 'Não consegui perceber exatamente o que queres consultar. Podes reformular? Consigo consultar os jogadores inscritos por divisão, jogos, horários, pontos, classificação e regras.';
- if(intent.intent==='players') {
-  const division=intent.division==='mine'?player.division:intent.division;
-  const members=await db.player.findMany({where:{division,status:'Ativo',verified:true},select:{name:true,side:true},orderBy:{name:'asc'}});
-  return rosterReply(division,members);
- }
- if(intent.intent==='help')return 'Consulta os teus jogos e regista vitória ou derrota em '+origin+'/jogos. Entra com o teu número WhatsApp e o código de validação. Inscrições e substituições dependem da organização.';
- if(intent.intent==='rules'){const section=rules.sections[intent.section];return (section?section.title+'\n'+section.text:'Consulta o regulamento do Ultimate Challenge.')+'\n\nVer regras: '+origin+'/regras';}
- if(intent.intent==='movements'){const row=await db.setting.findUnique({where:{key:'competition:status'}});const status=row?JSON.parse(row.value):null;return status?.blocked?'As movimentações estão pendentes: '+status.blocked:status?.nextMovement?'Próximas subidas e descidas previstas: '+status.nextMovement+'.':'Ainda não há data de movimentações definida. A organização precisa de publicar a primeira ronda.';}
- if(intent.intent==='games'){
-  const pending=(await vacancies()).filter(v=>v.status==='pending');
-  let games=await db.game.findMany({where:{published:true,date:{gte:today},OR:[{a:{has:playerId}},{b:{has:playerId}}]},include:{court:true},orderBy:[{date:'asc'},{time:'asc'}]});
-  const date=new Date(today+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+1);const tomorrow=date.toISOString().slice(0,10);
-  if(intent.when==='today'||intent.when==='tomorrow')games=games.filter(g=>g.date===(intent.when==='today'?today:tomorrow));
-  else if(intent.when==='week'){const end=new Date(today+'T12:00:00Z');end.setUTCDate(end.getUTCDate()+((7-end.getUTCDay())%7));games=games.filter(g=>g.date<=end.toISOString().slice(0,10));}
-  else if(games.length)games=games.filter(g=>g.round===games[0].round);
-  if(!games.length)return `${player.name}, não tens jogos publicados ${intent.when==='today'?'para hoje':intent.when==='tomorrow'?'para amanhã':intent.when==='week'?'para esta semana':'para as próximas rondas'}.`;
-  const people=await db.player.findMany({where:{id:{in:[...new Set(games.flatMap(g=>[...g.a,...g.b]))]}},select:{id:true,name:true}});const name=(id:string)=>people.find(p=>p.id===id)?.name??'Jogador';
-  return `${player.name}, os teus jogos:\n\n`+games.slice(0,4).map(g=>{const absent=pending.filter(v=>v.gameIds.includes(g.id));const team=g.a.includes(playerId)?g.a:g.b,other=g.a.includes(playerId)?g.b:g.a;const label=(id:string)=>absent.some(v=>v.playerId===id)?'Aguarda suplente':name(id);return `${g.date} · ${g.time} · ${g.court.name} · ${g.court.location}\nParceiro: ${team.filter(id=>id!==playerId).map(label).join(' / ')}\nAdversários: ${other.map(label).join(' / ')}${absent.length?'\nAguarda suplente aprovado.':''}${absent.some(v=>v.playerId===playerId)?' A tua ausência está registada.':''}`;}).join('\n\n')+'\n\n'+origin+'/jogos';
- }
- const people=await db.player.findMany();const games=await db.game.findMany({where:{published:true,date:{startsWith:today.slice(0,7)}}});
- const table=rankings(people.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],today.slice(0,7));
- const division=intent.division==='mine'?player.division:intent.division;const divisionTable=table.filter(p=>p.division===division);
- if(intent.intent==='points'){const mine=table.find(p=>p.id===playerId);return `${player.name}, tens ${mine?.points??0} pontos este mês na divisão ${player.division}. Vitórias: ${mine?.wins??0}; derrotas: ${mine?.losses??0}; bónus acumulado: ${mine?.bonus??0}. Posição: ${table.filter(p=>p.division===player.division).findIndex(p=>p.id===playerId)+1}.`;}
- return `Classificação atual · ${division} · ${today.slice(0,7)}\n`+(divisionTable.length?divisionTable.slice(0,10).map((p,i)=>`${i+1}. ${p.name} — ${p.points} pontos`).join('\n'):'Ainda não há jogadores nesta divisão.');
+const conversations = new Map<string,Promise<unknown>>();
+export async function answerQuestion(playerId:string,text:string,scope='simulator') {
+ const memoryKey='bot-memory:'+digest(scope+':'+playerId);
+ const previous=conversations.get(memoryKey)??Promise.resolve();
+ const work=previous.catch(()=>{}).then(async()=>{
+  const player=await db.player.findUnique({where:{id:playerId}});
+  if(!player?.verified||player.status!=='Ativo')throw Error('Seleciona um jogador aprovado e validado.');
+  const key=await db.setting.findUnique({where:{key:'openai_key'}});if(!key)throw Error('Configura primeiro a chave OpenAI.');
+  await budget(playerId);
+  const record=await db.setting.findUnique({where:{key:memoryKey}});
+  let history:Turn[]=[];
+  if(record){try{const saved=JSON.parse(decrypt(record.value,config.MESSAGE_KEY));if(saved.expiresAt>Date.now())history=saved.turns.slice(-8);}catch{}}
+  const answer=await converse(decrypt(key.value,config.MESSAGE_KEY),text,history,{name:player.name,division:player.division,side:player.side,today:todayLuanda(),timezone:'Africa/Luanda',gamesUrl:config.APP_ORIGIN+'/jogos',rulesUrl:config.APP_ORIGIN+'/regras'},q=>queryTournament(playerId,q));
+  if(answer){
+   const turns=[...history,{role:'user',content:text},{role:'assistant',content:answer}].slice(-8);
+   const value=encrypt(JSON.stringify({expiresAt:Date.now()+3600000,turns}),config.MESSAGE_KEY);
+   await db.setting.upsert({where:{key:memoryKey},create:{key:memoryKey,value},update:{value}});
+  }
+  return answer;
+ });
+ conversations.set(memoryKey,work);
+ try{return await work;}finally{if(conversations.get(memoryKey)===work)conversations.delete(memoryKey);}
 }
 export async function handleAI(group:string,phone:string,text:string,id:string){
  if(!text.trim()||text.length>1500||!await botEnabled())return;
@@ -56,7 +42,7 @@ export async function handleAI(group:string,phone:string,text:string,id:string){
  const key='bot-event:'+digest(group+':'+id);
  try{await db.setting.create({data:{key,value:'processing'}});}catch(e){if((e as {code?:string}).code==='P2002')return;throw e;}
  try{
- const answer=await answerQuestion(player.id,text);
+ const answer=await answerQuestion(player.id,text,group);
  await db.$transaction(async tx=>{
   if(answer && (await tx.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false' && (await tx.setting.findUnique({where:{key:'whatsapp_group'}}))?.value===group)await tx.outbox.create({data:{recipient:group,kind:'ai',encryptedBody:encrypt(JSON.stringify({format:"mentioned-reply-v1",...mentionedReply(answer,player.phone)}),config.MESSAGE_KEY),expiresAt:new Date(Date.now()+300000)}});
   await tx.setting.update({where:{key},data:{value:answer?'answered':'silent'}});

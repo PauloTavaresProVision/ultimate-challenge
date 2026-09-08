@@ -30,3 +30,7 @@ Por definir: quantidades de subidas/descidas, pontos e elegibilidade mensal apó
 ## Verificação
 
 Testes do domínio cobrem sorteios, combinações impossíveis, pontuação, correções, desempates e conflitos. O browser não foi usado para testes visuais nesta entrega. A integração WebMCP opcional expõe apenas leitura da classificação; não foi verificada num contexto WebMCP compatível.
+
+## WhatsApp: grupo único
+
+Todos os jogadores entram no mesmo grupo Escada. A mensagem semanal agrega M1+, M1 e M2. O conector futuro associa o número validado ao perfil e consulta a divisão atual, o lado e o jogo; a IA não infere a identidade. O link partilhado continua a exigir sessão autenticada para submeter resultados.

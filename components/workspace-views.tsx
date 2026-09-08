@@ -403,10 +403,18 @@ export default function WorkspaceViews({
     setEditGame(null);
     inform('Jogo atualizado. A classificação foi recalculada.');
   }
-  function previewMessage(d: Division) {
-    const rows = games.filter((g) => g.round === nextRound && g.division === d);
+  function previewMessage() {
+    const sections = divisions
+      .map((d) => {
+        const rows = games.filter(
+          (g) => g.round === nextRound && g.division === d,
+        );
+        if (!rows.length) return '';
+        return `${d}\n${rows.map((g) => `${formatDate(g.date)} · ${g.time} · ${courts.find((c) => c.id === g.court)?.name}\n${teams(g, 'a')}\ncontra ${teams(g, 'b')}`).join('\n\n')}`;
+      })
+      .filter(Boolean);
     setMessage(
-      `🎾 Escada ${d} · Ronda ${nextRound}\n\n${rows.map((g) => `${formatDate(g.date)} · ${g.time} · ${courts.find((c) => c.id === g.court)?.name}\n${teams(g, 'a')}\ncontra ${teams(g, 'b')}`).join('\n\n')}\n\nO link de resultados será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
+      `🎾 Escada · Ronda ${nextRound}\n\n${sections.join('\n\n──────────\n\n')}\n\nO link de resultados das três divisões será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
     );
   }
   return (
@@ -875,20 +883,15 @@ export default function WorkspaceViews({
               <section className="panel message-preview">
                 <MessageCircle size={22} />
                 <div>
-                  <h2>Mensagem para os grupos</h2>
+                  <h2>Mensagem para o grupo Escada</h2>
                   <p>
-                    Revê o texto de cada divisão. O envio ainda não está ligado.
+                    Uma mensagem com os jogos de M1+, M1 e M2. O envio ainda não
+                    está ligado.
                   </p>
                 </div>
-                {divisions.map((d) => (
-                  <Button
-                    key={d}
-                    variant="outline"
-                    onClick={() => previewMessage(d)}
-                  >
-                    Ver {d}
-                  </Button>
-                ))}
+                <Button variant="outline" onClick={previewMessage}>
+                  Ver mensagem completa
+                </Button>
               </section>
             </>
           )}
@@ -959,27 +962,39 @@ export default function WorkspaceViews({
             </div>
             <Unplug size={25} />
           </section>
-          <div className="court-grid">
-            {divisions.map((d) => (
-              <section className="panel group-card" key={d}>
-                <Badge tone="neutral">{d}</Badge>
-                <h2>Grupo Escada {d}</h2>
-                <p>Grupo por associar</p>
-                <div className="info-note compact">
-                  <LinkIcon size={16} /> Convite disponível após configuração
-                </div>
-              </section>
-            ))}
-          </div>
+          <section className="panel group-card">
+            <Badge tone="neutral">M1+ · M1 · M2</Badge>
+            <h2>Grupo Escada</h2>
+            <p>Um único grupo para todos os jogadores · por associar</p>
+            <div className="info-note compact">
+              <LinkIcon size={16} /> Convite disponível após configuração
+            </div>
+          </section>
+          <section className="panel next-phase">
+            <h2>Cada número, um jogador</h2>
+            <p>
+              O bot vai associar o número de WhatsApp validado ao perfil na
+              plataforma e consultar o nome, a divisão atual, o lado e o jogo da
+              semana. Uma mudança de nível não exige mudar de grupo.
+            </p>
+            <p>
+              Números não registados não podem submeter resultados como
+              jogadores. No link dos jogos, a identificação depende da sessão
+              autenticada na plataforma.
+            </p>
+          </section>
           <section className="panel next-phase">
             <h2>Fluxo previsto</h2>
             <ol>
               <li>Inscrição com nome, WhatsApp, nascimento, nível e lado.</li>
               <li>Validação do número por código WhatsApp.</li>
-              <li>Aprovação no backoffice e envio do convite para o grupo.</li>
               <li>
-                Publicação semanal dos jogos, com campo, hora e link de
-                resultados.
+                Aprovação no backoffice e envio do convite para o grupo único
+                Escada.
+              </li>
+              <li>
+                Publicação semanal dos jogos das três divisões, com campo, hora
+                e link de resultados.
               </li>
             </ol>
           </section>

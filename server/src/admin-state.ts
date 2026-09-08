@@ -1,3 +1,4 @@
+import { vacancies } from './substitutions.ts';
 import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
 import { db } from './db.ts';
@@ -182,6 +183,12 @@ export function installAdminState(
         await tx.court.upsert({ where: { id }, create: c, update: fields });
       }
       const oldGames = await tx.game.findMany();
+      for(const v of (await vacancies(tx)).filter(v=>v.status==='pending')) {
+        for(const id of v.gameIds) {
+          const old=oldGames.find(g=>g.id===id), next=data.games.find(g=>g.id===id);
+          if(!old||!next||JSON.stringify(old.a)!==JSON.stringify(next.a)||JSON.stringify(old.b)!==JSON.stringify(next.b)||next.winner||old.date!==next.date||old.round!==next.round||!next.published)bad('O jogo aguarda suplente. Resolve a substituição antes de alterar participantes ou resultados.');
+        }
+      }
       for (const g of data.games) {
         if (oldGames.some(old => old.round === g.round && old.duration !== 20)) continue;
         for (const id of [...g.a, ...g.b]) {

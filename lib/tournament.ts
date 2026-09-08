@@ -18,6 +18,7 @@ export type Court = {
   active: boolean;
 };
 export type Game = {
+  absentIds?: string[];
   id: string;
   round: number;
   division: Division;

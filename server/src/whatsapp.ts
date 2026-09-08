@@ -1,3 +1,4 @@
+import { handleParticipation, participationIntent } from './substitutions.ts';
 import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
 import { joinApprovedPlayer } from './group-join.ts';
@@ -162,13 +163,18 @@ export class WhatsApp {
             message.message?.conversation ??
             message.message?.extendedTextMessage?.text ??
             '';
-          if (!/^\/escada(?:\s|$)/i.test(text)) continue;
+          if (!/^\/escada(?:\s|$)/i.test(text) && !participationIntent(text)) continue;
           const id = message.key.id;
           if (!id || this.seen.has(id)) continue;
           this.seen.set(id, Date.now());
           if (this.seen.size > 1000) {
             const first = this.seen.keys().next().value;
             if (first) this.seen.delete(first);
+          }
+          if(participationIntent(text)) {
+            const phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
+            if(phone)void handleParticipation(message.key.remoteJid??'',phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined).catch(()=>console.error('Não foi possível processar a participação.'));
+            continue;
           }
           void this.onCommand(
             message.key.remoteJid ?? '',

@@ -1,5 +1,6 @@
 'use client';
 import { weeklySchedule } from '@/lib/tournament';
+import Substitutions from './substitutions';
 import OpenAISettings from './openai-settings';
 import CompetitionLive from './competition-live';
 import {
@@ -766,6 +767,7 @@ export default function WorkspaceViews({
       )}
       {view === 'Rondas e sorteios' && (
         <>
+          {live && <Substitutions />}
           <div className="round-workflow">
             <span className="step active">
               1 <b>Participantes</b>
@@ -1474,7 +1476,7 @@ function GameCard({
         </Badge>
         <span>Ronda {String(g.round).padStart(2, '0')}</span>
         <Badge tone={g.winner ? 'green' : 'neutral'}>
-          {g.winner ? 'Confirmado' : g.published ? 'Agendado' : 'Rascunho'}
+          {g.absentIds?.length ? 'Aguarda suplente' : g.winner ? 'Confirmado' : g.published ? 'Agendado' : 'Rascunho'}
         </Badge>
       </div>
       <div className="game-schedule">
@@ -1501,7 +1503,7 @@ function GameCard({
                 <div className="person-cell" key={id}>
                   <Avatar name={p?.name ?? 'Jogador'} />
                   <div>
-                    <strong>{p?.name}</strong>
+                    <strong>{g.absentIds?.includes(id) ? 'Aguarda suplente' : p?.name}</strong>
                     <small>{p?.side}</small>
                   </div>
                 </div>

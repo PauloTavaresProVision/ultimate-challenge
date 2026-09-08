@@ -1,3 +1,4 @@
+import { installSubstitutions, vacancies } from './substitutions.ts';
 import { installInviteSending } from './invite-sending.ts';
 import { installOpenAI } from './openai-settings.ts';
 import express from 'express';
@@ -137,6 +138,7 @@ const publicPlayer = (p: {
   note: string;
 }) => ({ ...p, birth: p.birth.toISOString().slice(0, 10) });
 async function snapshot() {
+  const pending=(await vacancies()).filter(v=>v.status==='pending');
   const [players, courts, games, revision, audit] = await Promise.all([
     db.player.findMany({ orderBy: { createdAt: 'asc' } }),
     db.court.findMany(),
@@ -147,7 +149,7 @@ async function snapshot() {
   return {
     players: players.map(publicPlayer),
     courts,
-    games: games.map(({ courtId, ...g }) => ({ ...g, court: courtId })),
+    games: games.map(({ courtId, ...g }) => ({ ...g, court: courtId, absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId) })),
     revision: revision?.value ?? 0,
     audit: audit.map((a) => a.action),
   };
@@ -417,7 +419,8 @@ app.get('/api/games', auth, async (_req, res) => {
   const people = await db.player.findMany({
     select: { id: true, name: true, side: true },
   });
-  res.json({ playerId: s.playerId, people, games });
+  const pending=(await vacancies()).filter(v=>v.status==='pending');
+  res.json({ playerId: s.playerId, people, games:games.map(g=>({...g,absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId)})) });
 });
 app.post('/api/games/:id/result', auth, async (req, res) => {
   const s = res.locals.session;
@@ -431,6 +434,7 @@ app.post('/api/games/:id/result', auth, async (req, res) => {
     if (!player?.verified || player.status !== 'Ativo') fail(403, 'A inscrição não está ativa.');
     const game = await tx.game.findUnique({ where: { id } });
     if (game && await tx.setting.findUnique({where:{key:'competition:month:'+game.date.slice(0,7)}})) fail(409, 'O mês deste jogo já foi encerrado.');
+    if((await vacancies(tx)).some(v=>v.status==='pending'&&v.gameIds.includes(id)))fail(409,'Este jogo aguarda um suplente aprovado pela organização.');
     const winner = resultWinner(game, s.playerId, outcome, new Date().toISOString().slice(0, 10));
     await tx.game.update({ where: { id }, data: { winner } });
     await tx.audit.create({ data: { actor: s.playerId, action: `${player.name} registou ${outcome === 'win' ? 'vitória' : 'derrota'} no jogo ${id} (${game!.date}, ${game!.division}).` } });
@@ -445,6 +449,7 @@ await db.outbox.updateMany({
   where: { status: 'sending' },
   data: { status: 'uncertain' },
 });
+installSubstitutions(app, auth, admin);
 installAdminState(app, auth, admin, wa, snapshot);
 installOpenAI(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {

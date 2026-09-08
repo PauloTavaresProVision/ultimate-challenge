@@ -323,14 +323,22 @@ export class WhatsApp {
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;
         }
-        await this.socket.sendMessage(row.recipient, {
+        const result = await this.socket.sendMessage(row.recipient, {
           text: decrypt(row.encryptedBody, config.MESSAGE_KEY),
+        });
+        if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
+        await db.setting.upsert({
+          where: { key: `outbox-message:${row.id}` },
+          create: { key: `outbox-message:${row.id}`, value: result.key.id },
+          update: { value: result.key.id },
         });
         await db.outbox.update({
           where: { id: row.id },
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
-      } catch {
+      } catch (error) {
+        const code = (error as { output?: { statusCode?: number } })?.output?.statusCode;
+        console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({
           where: { id: row.id },
           data: { status: 'uncertain' },

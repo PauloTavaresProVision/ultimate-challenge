@@ -5,7 +5,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { api } from './whatsapp-live';
 const countries=[['ao','Angola','244'],['pt','Portugal','351'],['br','Brasil','55'],['mx','México','52'],['ae','Emirados Árabes Unidos / Dubai','971'],['mz','Moçambique','258'],['cv','Cabo Verde','238'],['za','África do Sul','27'],['es','Espanha','34'],['fr','França','33'],['gb','Reino Unido','44'],['us','Estados Unidos','1']];
-const labels:Record<string,string>={pending:'Pendente',sending:'A enviar',sent:'Enviado',uncertain:'Sem confirmação — verifica no WhatsApp',expired:'Expirado',cancelled:'Cancelado',failed:'Falhou'};
+const labels:Record<string,string>={pending:'Pendente',sending:'A enviar',sent:'Enviado ao WhatsApp — entrega não confirmada',uncertain:'Sem confirmação — verifica no WhatsApp',expired:'Expirado',cancelled:'Cancelado',failed:'Falhou'};
 type Row={id:string;phone:string;status:string};
 export default function InviteDialog({connected}:{connected:boolean}){
  const [open,setOpen]=useState(false),[country,setCountry]=useState('244'),[numbers,setNumbers]=useState(''),[message,setMessage]=useState('Olá! Estás convidado a participar no Ultimate Challenge, no Premier Padel Club. Preenche a tua inscrição através deste link:'),[batch,setBatch]=useState(''),[rows,setRows]=useState<Row[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');

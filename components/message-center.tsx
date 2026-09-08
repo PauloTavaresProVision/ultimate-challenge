@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { api } from './whatsapp-live';
 type Delivery={mode:'immediate'|'scheduled';hoursBefore:number};
 type Message={targetName?:string;id:string;kind:string;status:string;attempts:number;createdAt:string;sentAt:string|null;nextAttemptAt:string;expiresAt:string};
-const labels:Record<string,string>={added:'Adicionado ao grupo',already_member:'Já pertence ao grupo',invited:'Convite enviado',pending:'Pendente',sending:'A enviar',sent:'Enviada',uncertain:'Sem confirmação',expired:'Expirada',cancelled:'Cancelada'};
+const labels:Record<string,string>={added:'Adicionado ao grupo',already_member:'Já pertence ao grupo',invited:'Convite enviado',pending:'Pendente',sending:'A enviar',sent:'Enviada ao WhatsApp — entrega não confirmada',uncertain:'Sem confirmação',expired:'Expirada',cancelled:'Cancelada'};
 const kinds:Record<string,string>={ai:'Resposta da IA',substitution:'Ausências e suplentes',welcome:'Boas-vindas ao grupo',group_join:'Entrada automática no grupo',invitation:'Convite de inscrição',test:'Teste de ligação',round:'Jogos do torneio',approval:'Convite para o grupo',otp:'Código de validação',verification:'Código de validação'};
 const date=(v:string)=>new Date(v).toLocaleString('pt-PT',{timeZone:'Africa/Luanda',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 export default function MessageCenter(){

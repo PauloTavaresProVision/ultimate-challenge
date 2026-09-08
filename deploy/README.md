@@ -13,6 +13,8 @@ As alterações do backoffice exigem **Guardar alterações**. A aprovação ger
 
 ## Dados e sessão
 
+Para alterar o administrador, edita `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 8 caracteres) em `deploy/.env` e executa `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --force-recreate app`. O arranque atualiza a mesma conta, preserva os dados do torneio e termina as sessões administrativas antigas. Um simples `restart` não recarrega as variáveis do ficheiro.
+
 Os volumes `postgres_data` e `whatsapp_session` preservam os dados e a sessão Baileys. Não uses `down -v` para reiniciar. Para backups, guarda os dois volumes e o ficheiro de configuração num local seguro. Preserva MESSAGE_KEY: a fila de mensagens é cifrada com essa chave. Um envio com resultado incerto não é repetido automaticamente para evitar mensagens duplicadas.
 
 WA_AUTO_CONNECT fica false: cada arranque exige clicar em Ligar. Depois de associares o número, podes alterar para true para reconectar automaticamente. Desligar fecha a conexão sem apagar credenciais.

@@ -9,7 +9,7 @@ export const config = z
     SESSION_SECRET: z.string().min(32),
     MESSAGE_KEY: z.string().regex(/^[a-f0-9]{64}$/),
     ADMIN_EMAIL: z.email(),
-    ADMIN_PASSWORD: z.string().min(16),
+    ADMIN_PASSWORD: z.string().min(8),
     WHATSAPP_GROUP_INVITE: z.string().default(''),
     WA_AUTH_DIR: z.string().default('.session'),
     WA_AUTO_CONNECT: z.enum(['true', 'false']).default('false'),

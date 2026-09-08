@@ -1,4 +1,5 @@
 import express from 'express';
+import { syncEnvironmentAdmin } from './admin-bootstrap.ts';
 import { installAdminState } from './admin-state.ts';
 import helmet from 'helmet';
 import { randomInt } from 'node:crypto';
@@ -377,14 +378,7 @@ app.get('/api/games', auth, async (_req, res) => {
   res.json({ playerId: s.playerId, people, games });
 });
 const dummyPasswordHash = hashPassword(randomToken());
-await db.admin.upsert({
-  where: { email: config.ADMIN_EMAIL.toLowerCase() },
-  create: {
-    email: config.ADMIN_EMAIL.toLowerCase(),
-    passwordHash: hashPassword(config.ADMIN_PASSWORD),
-  },
-  update: {},
-});
+await syncEnvironmentAdmin();
 await db.revision.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
 await db.outbox.updateMany({
   where: { status: 'sending' },

@@ -2,11 +2,14 @@
 import { weeklySchedule } from '@/lib/tournament';
 import Substitutions from './substitutions';
 import RulesEditor from './rules-editor';
+import CalendarSettings from './calendar-settings';
+import {api} from './whatsapp-live';
 import AIBotSettings from './ai-bot-settings';
 import OpenAISettings from './openai-settings';
 import CompetitionLive from './competition-live';
 import {
   useState,
+  useEffect,
   type Dispatch,
   type SetStateAction,
   type ReactNode,
@@ -184,6 +187,9 @@ export default function WorkspaceViews({
   const [message, setMessage] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
   const [settingsTab,setSettingsTab]=useState('general');
+  const [roundTime,setRoundTime]=useState('18:00');
+  const [calendarLoading,setCalendarLoading]=useState(!!live);
+  const [calendarError,setCalendarError]=useState('');
   const month = live ? new Date().toISOString().slice(0, 7) : '2026-09';
   const monthEnd = new Date(
     Number(month.slice(0, 4)),
@@ -195,6 +201,16 @@ export default function WorkspaceViews({
       ? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
       : '2026-09-12',
   );
+  useEffect(()=>{if(!live)return;let active=true;api<{weekday:number|null;time:string}>('/admin/calendar').then(c=>{
+    if(!active)return;setRoundTime(c.time);
+    if(c.weekday!==null){
+      const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
+      let date=new Date(today+'T12:00:00Z');
+      const last=games.map(g=>g.date).sort().at(-1);
+      if(last){const next=new Date(last+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+7);if(next>date)date=next;}
+      date.setUTCDate(date.getUTCDate()+((c.weekday-date.getUTCDay()+7)%7));setRoundDate(date.toISOString().slice(0,10));
+    }
+  }).catch(e=>{if(active)setCalendarError(e.message);}).finally(()=>{if(active)setCalendarLoading(false);});return()=>{active=false;};},[live]);
   const [reason, setReason] = useState('');
   const inform = (text: string) => {
     setNotice(
@@ -370,7 +386,8 @@ export default function WorkspaceViews({
         prior,
         nextRound,
       );
-      const generated = weeklySchedule(pairs, available, nextRound, roundDate);
+      if(calendarLoading||calendarError)throw new Error(calendarError||'A carregar o calendário.');
+      const generated = weeklySchedule(pairs, available, nextRound, roundDate, roundTime);
       if (generated.some((g) => conflict(g, [...prior, ...generated])))
         throw new Error(
           'Existe conflito de campo ou jogador no horário proposto.',
@@ -819,6 +836,8 @@ export default function WorkspaceViews({
                 />
               </Field>
               <div className="round-summary">
+                <Field label="Hora de início (Angola)"><Input type="time" value={roundTime} disabled={saving||calendarLoading} onChange={e=>setRoundTime(e.target.value)}/></Field>
+                {calendarError&&<p role="alert" className="form-error">{calendarError}</p>}
                 <Users size={18} />
                 <strong>
                   {active.filter((p) => !excluded.includes(p.id)).length}
@@ -1054,8 +1073,9 @@ export default function WorkspaceViews({
       )}
       {view === 'Configurações' && (
         <>
-          {live && <div className="message-filters" role="group" aria-label="Separadores das configurações"><Button variant={settingsTab==='general'?'default':'outline'} onClick={()=>setSettingsTab('general')}>Geral</Button><Button variant={settingsTab==='rules'?'default':'outline'} onClick={()=>setSettingsTab('rules')}>Regras</Button></div>}
+          {live && <div className="message-filters" role="group" aria-label="Separadores das configurações"><Button variant={settingsTab==='general'?'default':'outline'} onClick={()=>setSettingsTab('general')}>Geral</Button><Button variant={settingsTab==='calendar'?'default':'outline'} onClick={()=>setSettingsTab('calendar')}>Calendário</Button><Button variant={settingsTab==='rules'?'default':'outline'} onClick={()=>setSettingsTab('rules')}>Regras</Button></div>}
           {live && settingsTab==='rules' && <RulesEditor />}
+          {live && settingsTab==='calendar' && <CalendarSettings />}
           <div hidden={live && settingsTab!=='general'}>
           {live && <OpenAISettings />}
           {live && <AIBotSettings />}

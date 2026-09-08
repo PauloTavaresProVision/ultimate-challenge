@@ -226,7 +226,9 @@ export function conflict(candidate: Game, games: Game[]) {
 
 
 /** Fixed partners; prefer new opponents while every team changes court. */
-export function weeklySchedule(pairs: ReturnType<typeof draw>, courts: Court[], round: number, date: string): Game[] {
+export function weeklySchedule(pairs: ReturnType<typeof draw>, courts: Court[], round: number, date: string, startTime = '18:00'): Game[] {
+  if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(startTime))throw new Error('Indica uma hora de início válida.');
+  const [hour,minute]=startTime.split(':').map(Number);
   if (courts.length < 2) throw new Error('Ativa pelo menos dois campos para permitir a rotação entre jogos.');
   const result: Game[] = [];
   const batches: typeof pairs[] = [];
@@ -258,7 +260,8 @@ export function weeklySchedule(pairs: ReturnType<typeof draw>, courts: Court[], 
       }
       search(teams.map((_,i)=>i),new Set(),[],0);
       if(!best)throw new Error('Não foi possível combinar adversários e rotação de campos. Tenta outro sorteio.');
-      const minutes=1080+batchIndex*80+slot*20;
+      const minutes=hour*60+minute+batchIndex*80+slot*20;
+      if(minutes+20>1440)throw new Error('Os jogos ultrapassam a meia-noite. Escolhe uma hora de início mais cedo.');
       if(minutes+20>1440)throw new Error('Não há horários suficientes no dia. Ativa mais campos.');
       for(const match of best as Match[]) {
         const {a,b,court}=match;

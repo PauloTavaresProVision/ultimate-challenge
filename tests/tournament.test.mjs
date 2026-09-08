@@ -115,3 +115,10 @@ test('Opponent rotation finds distinct opponents with four courts and four teams
  const own=games.filter(g=>[...g.a,...g.b].includes('p0'));
  assert.equal(new Set(own.map(g=>(g.a.includes('p0')?g.b:g.a).slice().sort().join('|'))).size,3);
 });
+test('Custom starting time is used and sessions cannot cross midnight',()=>{
+ const pairs=draw(initialPlayers.slice(0,8),[],1),courts=[{id:'a'},{id:'b'}];
+ const games=weeklySchedule(pairs,courts,1,'2026-09-01','09:30');
+ assert.equal(games.map(g=>g.time).sort()[0],'09:30');
+ assert.throws(()=>weeklySchedule(pairs,courts,1,'2026-09-01','23:30'),/meia-noite/);
+ assert.throws(()=>weeklySchedule(pairs,courts,1,'2026-09-01','25:00'),/hora/);
+});

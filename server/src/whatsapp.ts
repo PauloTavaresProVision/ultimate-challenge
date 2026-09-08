@@ -1,5 +1,6 @@
 import { handleAI, botEnabled } from './ai-bot.ts';
 import { SendGate } from './whatsapp-send-gate.ts';
+import { decodeBotMessage } from './bot-message.ts';
 import './signal-log-redaction.ts';
 import { resolveRecipient } from './whatsapp-recipient.ts';
 import { nextReceipt } from './whatsapp-receipts.ts';
@@ -358,7 +359,8 @@ export class WhatsApp {
       include: { court: true },
     });
     await this.socket.sendMessage(chat, {
-      text: `${player.name} · ${player.division} · ${player.side}\n${game ? `Próximo jogo: ${game.date}, ${game.time}, ${game.court.name}.` : 'Ainda não tens um jogo publicado.'}\n${config.APP_ORIGIN}/jogos`,
+      mentions: [`${phone.slice(1)}@s.whatsapp.net`],
+      text: `@${phone.slice(1)} ${player.name} · ${player.division} · ${player.side}\n${game ? `Próximo jogo: ${game.date}, ${game.time}, ${game.court.name}.` : 'Ainda não tens um jogo publicado.'}\n${config.APP_ORIGIN}/jogos`,
     });
   }
   async deliver() {
@@ -402,9 +404,8 @@ export class WhatsApp {
           return;
         }
         const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
-        const result = await this.socket.sendMessage(recipient, {
-          text: decrypt(row.encryptedBody, config.MESSAGE_KEY),
-        });
+        const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
+        const result = await this.socket.sendMessage(recipient, row.kind === 'ai' ? decodeBotMessage(body) : {text:body});
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
         await db.setting.upsert({
           where: { key: `outbox-message:${row.id}` },

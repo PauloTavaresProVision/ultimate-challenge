@@ -7,6 +7,7 @@ import {rankings,type Player} from '../../lib/tournament.ts';
 import {defaultRules,type PublicRules} from '../../lib/public-rules.ts';
 import {todayLuanda,vacancies} from './substitutions.ts';
 import {classifyQuestion} from './bot-intent.ts';
+import {mentionedReply} from './bot-message.ts';
 export async function botEnabled(){return (await db.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false';}
 async function budget(playerId:string){
  const hour=new Date().toISOString().slice(0,13),minute=new Date().toISOString().slice(0,16);
@@ -51,7 +52,7 @@ export async function handleAI(group:string,phone:string,text:string,id:string){
  try{
  const answer=await answerQuestion(player.id,text);
  await db.$transaction(async tx=>{
-  if(answer && (await tx.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false' && (await tx.setting.findUnique({where:{key:'whatsapp_group'}}))?.value===group)await tx.outbox.create({data:{recipient:group,kind:'ai',encryptedBody:encrypt(answer,config.MESSAGE_KEY),expiresAt:new Date(Date.now()+300000)}});
+  if(answer && (await tx.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false' && (await tx.setting.findUnique({where:{key:'whatsapp_group'}}))?.value===group)await tx.outbox.create({data:{recipient:group,kind:'ai',encryptedBody:encrypt(JSON.stringify({format:"mentioned-reply-v1",...mentionedReply(answer,player.phone)}),config.MESSAGE_KEY),expiresAt:new Date(Date.now()+300000)}});
   await tx.setting.update({where:{key},data:{value:answer?'answered':'silent'}});
   if(answer)await tx.audit.create({data:{actor:'bot',action:`IA preparou uma resposta para ${player.name}: ${answer.slice(0,1500)}`}});
  });

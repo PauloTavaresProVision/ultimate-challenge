@@ -91,6 +91,21 @@ export class WhatsApp {
         shouldSyncHistoryMessage: () => false,
       });
       this.socket = sock;
+      sock.ev.on('messages.update', updates => {
+        if (generation !== this.generation) return;
+        for (const {key, update} of updates) {
+          if (!key.fromMe || !key.id || !key.remoteJid?.endsWith('@s.whatsapp.net') && !key.remoteJid?.endsWith('@lid')) continue;
+          const status = update.status;
+          if (status == null || ![0, 2, 3, 4, 5].includes(status)) continue;
+          void db.$transaction(async tx => {
+            const receiptKey = `wa-receipt:${key.id}`;
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${receiptKey}))`;
+            const previous = await tx.setting.findUnique({where:{key:receiptKey}});
+            if (previous && Number(previous.value) >= status) return;
+            await tx.setting.upsert({where:{key:receiptKey},create:{key:receiptKey,value:String(status)},update:{value:String(status)}});
+          }).catch(() => console.error('Não foi possível guardar a confirmação WhatsApp.'));
+        }
+      });
       sock.ev.on('creds.update', () => {
         if (generation !== this.generation) return;
         void saveCreds().catch(() => {

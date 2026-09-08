@@ -34,6 +34,18 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
     if(!batch)return res.status(404).json({error:'Envio não encontrado.'});
     const rows=JSON.parse(batch.value) as {phone:string;id:string}[];
     const messages=await db.outbox.findMany({where:{id:{in:rows.map(r=>r.id)}},select:{id:true,status:true}});
-    res.json(rows.map(r=>({...r,status:messages.find(m=>m.id===r.id)?.status??'expired'})));
+    const result = await Promise.all(rows.map(async r=>{
+      let status = messages.find(m=>m.id===r.id)?.status??'expired';
+      const message = await db.setting.findUnique({where:{key:'outbox-message:'+r.id}});
+      if(message && status === 'sent') {
+        const receipt = await db.setting.findUnique({where:{key:'wa-receipt:'+message.value}});
+        if(receipt) {
+          const code = Number(receipt.value);
+          status = code >= 4 ? 'read' : code === 3 ? 'delivered' : code === 2 ? 'accepted' : code === 0 ? 'failed' : status;
+        }
+      }
+      return {...r,status};
+    }));
+    res.json(result);
   });
 }

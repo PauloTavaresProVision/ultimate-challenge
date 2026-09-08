@@ -22,7 +22,7 @@ export async function api<T = any>(
   return data;
 }
 type Group = { id: string; name: string };
-type Connection = { status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
+type Connection = { lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
@@ -62,6 +62,7 @@ export default function WhatsAppLive() {
   const groupName = groups.find(g => g.id === state.groupId)?.name ?? state.groupName;
   return <div className="wa-workspace">
     {error && <div className="form-error" role="alert">{error}</div>}
+    {state.lastError && <p className="form-error" role="status">{state.lastError}</p>}
     <section className="wa-connection">
       <div className="wa-account">
         <div className="wa-account-icon"><MessageCircle size={27} /></div>

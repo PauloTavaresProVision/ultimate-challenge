@@ -1,3 +1,4 @@
+import { disconnectPolicy } from './whatsapp-disconnect.ts';
 import { joinApprovedPlayer } from './group-join.ts';
 import makeWASocket, {
   useMultiFileAuthState,
@@ -28,6 +29,7 @@ export class WhatsApp {
     | 'logged_out'
     | 'error' = 'disconnected';
   qr: string | null = null;
+  lastError: string | null = null;
   private seen = new Map<string, number>();
   connectedAt: string | null = null;
   get account() {
@@ -90,17 +92,22 @@ export class WhatsApp {
         if (generation !== this.generation) return;
         void saveCreds().catch(() => {
           this.status = 'error';
+          this.lastError = 'Não foi possível guardar a sessão WhatsApp. Verifica as permissões e o espaço em disco.';
+          console.error('WhatsApp: falha ao guardar credenciais.');
         });
       });
       sock.ev.on('connection.update', async (update) => {
         if (generation !== this.generation) return;
         if (update.qr) {
-          this.qr = await QRCode.toDataURL(update.qr);
+          const qr = await QRCode.toDataURL(update.qr);
+          if (generation !== this.generation || !this.enabled) return;
+          this.qr = qr;
           this.status = 'qr';
         }
         if (update.connection === 'open') {
           this.connectedAt = new Date().toISOString();
           this.status = 'connected';
+          this.lastError = null;
           this.qr = null;
           this.failures = 0;
         }
@@ -110,16 +117,13 @@ export class WhatsApp {
           const code = (
             update.lastDisconnect?.error as { output?: { statusCode?: number } }
           )?.output?.statusCode;
-          const terminal = [
-            DisconnectReason.loggedOut,
-            DisconnectReason.badSession,
-            DisconnectReason.connectionReplaced,
-            DisconnectReason.forbidden,
-          ].includes(code ?? 0);
-          if (terminal) {
+          const policy = disconnectPolicy(code);
+          this.lastError = policy.message;
+          console.warn('WhatsApp desligado:', code ?? 'sem código', policy.message);
+          if (policy.stop) {
             this.generation++;
-            await writeFile(join(config.WA_AUTH_DIR, '.requires-qr'), 'Session rejected; pair again.', { mode: 0o600 }).catch(() => {});
-            this.status = 'logged_out';
+            if (policy.invalidate) await writeFile(join(config.WA_AUTH_DIR, '.requires-qr'), 'Session rejected; pair again.', {mode:0o600}).catch(()=>{});
+            this.status = policy.invalidate ? 'logged_out' : 'error';
             this.enabled = false;
             return;
           }
@@ -159,6 +163,7 @@ export class WhatsApp {
         }
       });
     } catch {
+      this.lastError = 'Não foi possível iniciar a ligação. A sessão guardada foi preservada.';
       this.status = 'error';
       this.enabled = false;
       this.socket = null;

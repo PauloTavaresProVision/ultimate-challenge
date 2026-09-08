@@ -338,7 +338,7 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
     where: { key: 'whatsapp_group' },
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
-  res.json({ status: wa.status, qr: wa.qr, groupId: group?.value ?? null,
+  res.json({ status: wa.status, lastError: wa.lastError, qr: wa.qr, groupId: group?.value ?? null,
     groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
 });

@@ -108,6 +108,7 @@ export function installAdminState(
       }
     }
     let invite: string | null = null;
+    const targetGroup = await db.setting.findUnique({where:{key:"whatsapp_group"}});
     const prior = await db.player.findMany();
     const approvals = data.players.filter(
       (p) =>
@@ -167,9 +168,9 @@ export function installAdminState(
           await tx.outbox.create({
             data: {
               recipient: `${p.phone.slice(1)}@s.whatsapp.net`,
-              kind: 'approval',
+              kind: 'group_join',
               encryptedBody: encrypt(
-                `Olá ${p.name}, a tua inscrição no Escada foi aprovada! Divisão: ${p.division}. Entra no grupo: ${invite}`,
+                JSON.stringify({playerId:p.id,group:targetGroup!.value,text:`Olá ${p.name}, a tua inscrição no Ultimate Challenge foi aprovada! Divisão: ${p.division}. Entra no grupo: ${invite}`}),
                 config.MESSAGE_KEY,
               ),
               expiresAt: new Date(Date.now() + 86400000),

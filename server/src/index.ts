@@ -376,6 +376,7 @@ app.get('/api/admin/messages', auth, admin, async (_req, res) => {
     await db.outbox.findMany({
       select: {
         id: true,
+        recipient: true,
         kind: true,
         status: true,
         attempts: true,

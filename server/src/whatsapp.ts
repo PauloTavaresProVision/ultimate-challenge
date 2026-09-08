@@ -1,3 +1,4 @@
+import { joinApprovedPlayer } from './group-join.ts';
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -268,6 +269,18 @@ export class WhatsApp {
       });
       if (!claim.count) return;
       try {
+        if(row.kind === 'group_join') {
+          const payload=JSON.parse(decrypt(row.encryptedBody,config.MESSAGE_KEY)) as {playerId:string;group:string;text:string};
+          const player=await db.player.findUnique({where:{id:payload.playerId}});
+          const currentGroup=await db.setting.findUnique({where:{key:'whatsapp_group'}});
+          if(!player || player.status!=='Ativo' || !player.verified || currentGroup?.value!==payload.group) {
+            await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
+          }
+          const outcome=await joinApprovedPlayer(this.socket,payload.group,row.recipient);
+          if(outcome==='invite')await this.socket.sendMessage(row.recipient,{text:payload.text});
+          await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
+          return;
+        }
         await this.socket.sendMessage(row.recipient, {
           text: decrypt(row.encryptedBody, config.MESSAGE_KEY),
         });

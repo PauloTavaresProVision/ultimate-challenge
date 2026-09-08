@@ -1885,3 +1885,50 @@ h1 {
     height: 175px;
   }
 }
+.auth-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #edf3ee;
+}
+.auth-card {
+  width: min(100%, 560px);
+  padding: 32px;
+}
+.auth-card .form-grid {
+  grid-template-columns: 1fr;
+}
+.auth-card h1 {
+  font-size: 29px;
+}
+.auth-card .subtitle {
+  line-height: 1.7;
+}
+.qr-area {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  flex-wrap: wrap;
+  padding: 20px 0;
+}
+.qr-area p {
+  font-size: 15px;
+  max-width: 300px;
+  line-height: 1.8;
+}
+.player-page {
+  max-width: 1000px;
+  margin: auto;
+  padding: 30px;
+}
+.player-page .panel p {
+  margin: 15px 0;
+  line-height: 1.7;
+}
+.info-note a {
+  overflow-wrap: anywhere;
+}
+.next-phase p {
+  margin-bottom: 15px;
+}

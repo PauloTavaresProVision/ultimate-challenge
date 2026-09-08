@@ -37,3 +37,10 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+server/node_modules/
+server/src/generated/
+server/.session/
+server/.data/
+!server/.env.example
+!deploy/.env.example
+server/web/

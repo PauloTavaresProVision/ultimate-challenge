@@ -1,3 +1,7 @@
+## Instalação local com PostgreSQL e Baileys
+
+A nova instalação Docker está descrita em [deploy/README.md](deploy/README.md). Inclui login administrativo, PostgreSQL/Prisma, convite de inscrição, código WhatsApp, aprovação e painel Baileys por QR. A OpenAI está adiada. O site publicado abaixo continua a ser uma demonstração independente.
+
 # Escada — backoffice
 
 Primeira versão interativa para validar o design e os fluxos de gestão do torneio.

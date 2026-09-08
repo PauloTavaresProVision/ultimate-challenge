@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+model Admin {
+  id String @id @default(uuid())
+  email String @unique
+  passwordHash String
+  createdAt DateTime @default(now())
+  sessions Session[]
+}
+model Player {
+  id String @id @default(uuid())
+  name String
+  phone String @unique
+  birth DateTime @db.Date
+  side String
+  division String
+  status String @default("Pendente")
+  verified Boolean @default(false)
+  note String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  codes VerificationCode[]
+}
+model Session {
+  tokenHash String @id
+  adminId String?
+  playerId String?
+  admin Admin? @relation(fields:[adminId],references:[id],onDelete:Cascade)
+  player Player? @relation(fields:[playerId],references:[id],onDelete:Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}
+model Invite {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+}
+model VerificationCode {
+  id String @id @default(uuid())
+  playerId String
+  player Player @relation(fields:[playerId],references:[id],onDelete:Cascade)
+  digest String
+  attempts Int @default(0)
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([playerId,createdAt])
+}
+model Court {
+  id String @id @default(uuid())
+  name String @unique
+  location String
+  active Boolean @default(true)
+  games Game[]
+}
+model Game {
+  id String @id @default(uuid())
+  round Int
+  division String
+  a String[]
+  b String[]
+  courtId String
+  court Court @relation(fields:[courtId],references:[id])
+  date String
+  time String
+  duration Int
+  winner String?
+  published Boolean @default(false)
+  @@index([round])
+}
+model Revision {
+  id Int @id
+  value Int @default(0)
+}
+model Audit {
+  id String @id @default(uuid())
+  actor String
+  action String
+  createdAt DateTime @default(now())
+}
+model Outbox {
+  id String @id @default(uuid())
+  recipient String
+  encryptedBody String
+  kind String
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  expiresAt DateTime
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status,nextAttemptAt])
+}
+model Setting {
+  key String @id
+  value String
+}
+model RateLimit {
+  key String @id
+  count Int
+  expiresAt DateTime
+}

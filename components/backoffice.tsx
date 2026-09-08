@@ -34,6 +34,15 @@ import {
 import { Button } from '@/components/ui/button';
 import WorkspaceViews from '@/components/workspace-views';
 import AgentTools from '@/components/agent-tools';
+import WhatsAppLive from '@/components/whatsapp-live';
+import type { Player, Court, Game } from '@/lib/tournament';
+export type LiveState = {
+  players: Player[];
+  courts: Court[];
+  games: Game[];
+  audit: string[];
+  revision: number;
+};
 import {
   initialPlayers,
   initialGames,
@@ -147,16 +156,43 @@ function Nav({
     </Sidebar>
   );
 }
-export default function Backoffice() {
-  const [audit, setAudit] = useState<string[]>([]);
+export default function Backoffice({
+  liveState,
+  onSave,
+}: {
+  liveState?: LiveState;
+  onSave?: (state: LiveState) => Promise<LiveState>;
+} = {}) {
+  const [audit, setAudit] = useState<string[]>(liveState?.audit ?? []);
   const [view, setView] = useState('Visão geral');
-  const [players, setPlayers] = useState(initialPlayers);
-  const [games, setGames] = useState(initialGames);
-  const [courts, setCourts] = useState(initialCourts);
+  const [players, setPlayers] = useState(liveState?.players ?? initialPlayers);
+  const [games, setGames] = useState(liveState?.games ?? initialGames);
+  const [courts, setCourts] = useState(liveState?.courts ?? initialCourts);
+  const [revision, setRevision] = useState(liveState?.revision ?? 0);
+  const [saving, setSaving] = useState(false);
+  const [saveNote, setSaveNote] = useState('');
+  async function save() {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      const saved = await onSave({ players, courts, games, audit, revision });
+      setPlayers(saved.players);
+      setCourts(saved.courts);
+      setGames(saved.games);
+      setAudit(saved.audit);
+      setRevision(saved.revision);
+      setSaveNote('Alterações guardadas na base de dados.');
+    } catch (e) {
+      setSaveNote((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
   const [division, setDivision] = useState('Todas');
   const pending = players.filter((p) => p.status === 'Pendente');
   const active = players.filter((p) => p.status === 'Ativo');
-  const ranks = rankings(players, games);
+  const month = liveState ? new Date().toISOString().slice(0, 7) : '2026-09';
+  const ranks = rankings(players, games, month);
   const leaders = divisions.map((d) => ranks.find((p) => p.division === d));
   return (
     <SidebarProvider>
@@ -172,7 +208,8 @@ export default function Backoffice() {
           </div>
           <div className="top-actions">
             <span className="connection">
-              <span className="offline-dot" /> WhatsApp desligado
+              <span className="offline-dot" />{' '}
+              {liveState ? 'WhatsApp · Baileys' : 'WhatsApp desligado'}
             </span>
             <span className="top-divider" />
             <Avatar name="Administrador" />
@@ -181,13 +218,39 @@ export default function Backoffice() {
         <main className="main">
           <div className="demo-strip">
             <span>
-              <span className="demo-dot" /> Ambiente de demonstração
+              <span className="demo-dot" />{' '}
+              {liveState
+                ? 'Instalação local · PostgreSQL'
+                : 'Ambiente de demonstração'}
             </span>
             <span>
-              Dados fictícios · alterações válidas durante esta sessão
+              {liveState
+                ? 'Guarda as alterações antes de sair.'
+                : 'Dados fictícios · alterações válidas durante esta sessão'}
             </span>
           </div>
           <div className="page-heading">
+            {liveState && (
+              <div>
+                <Button disabled={saving} onClick={save}>
+                  {saving ? 'A guardar…' : 'Guardar alterações'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    await fetch('/api/logout', { method: 'POST' });
+                    location.reload();
+                  }}
+                >
+                  Sair
+                </Button>
+                {saveNote && (
+                  <p role="status" className="subtitle">
+                    {saveNote}
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <p className="eyebrow">O TEU TORNEIO, EM JOGO</p>
               <h1>{view}</h1>
@@ -207,7 +270,12 @@ export default function Backoffice() {
           <div className="period-row">
             <div className="period">
               <CalendarDays size={17} />
-              <strong>Setembro 2026</strong>
+              <strong>
+                {new Date(month + '-15T12:00:00').toLocaleDateString('pt-PT', {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </strong>
               <Badge tone="neutral">Mês ativo</Badge>
             </div>
             <div className="division-filters">
@@ -295,8 +363,13 @@ export default function Backoffice() {
                   </p>
                   <div className="round-bottom">
                     <div>
-                      <strong>Ronda 02</strong>
-                      <span>12 set · sábado</span>
+                      <strong>
+                        Ronda{' '}
+                        {String(
+                          Math.max(0, ...games.map((g) => g.round)) + 1,
+                        ).padStart(2, '0')}
+                      </strong>
+                      <span>Prepara os próximos confrontos</span>
                     </div>
                     <Button onClick={() => setView('Rondas e sorteios')}>
                       Preparar sorteio <ArrowRight size={17} />
@@ -330,7 +403,11 @@ export default function Backoffice() {
                     </span>
                     <div>
                       <strong>WhatsApp por configurar</strong>
-                      <p>Ligação disponível na próxima etapa.</p>
+                      <p>
+                        {liveState
+                          ? 'Abre o painel para ligar por QR.'
+                          : 'Ligação disponível na próxima etapa.'}
+                      </p>
                     </div>
                     <ChevronRight size={17} />
                   </button>
@@ -409,7 +486,7 @@ export default function Backoffice() {
                 <div className="section-heading">
                   <div>
                     <h2>Últimos jogos</h2>
-                    <p>Resultados da primeira semana de setembro</p>
+                    <p>Consulta os confrontos do torneio</p>
                   </div>
                   <button
                     className="text-link"
@@ -459,8 +536,11 @@ export default function Backoffice() {
                   ))}
               </section>
             </>
+          ) : view === 'WhatsApp' && liveState ? (
+            <WhatsAppLive />
           ) : (
             <WorkspaceViews
+              live={!!liveState}
               audit={audit}
               setAudit={setAudit}
               key={view}

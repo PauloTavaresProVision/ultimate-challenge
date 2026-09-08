@@ -73,6 +73,7 @@ import {
   type Division,
 } from '@/lib/tournament';
 type Props = {
+  live?: boolean;
   audit: string[];
   setAudit: Dispatch<SetStateAction<string[]>>;
   view: string;
@@ -148,6 +149,7 @@ const blankPlayer: Player = {
   note: '',
 };
 export default function WorkspaceViews({
+  live = false,
   audit,
   setAudit,
   view,
@@ -169,10 +171,24 @@ export default function WorkspaceViews({
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [roundDate, setRoundDate] = useState('2026-09-12');
+  const month = live ? new Date().toISOString().slice(0, 7) : '2026-09';
+  const monthEnd = new Date(
+    Number(month.slice(0, 4)),
+    Number(month.slice(5)),
+    0,
+  ).getDate();
+  const [roundDate, setRoundDate] = useState(
+    live
+      ? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+      : '2026-09-12',
+  );
   const [reason, setReason] = useState('');
   const inform = (text: string) => {
-    setNotice(text);
+    setNotice(
+      live
+        ? 'Alterações locais preparadas. Usa Guardar alterações para confirmar na base de dados.'
+        : text,
+    );
     setError('');
   };
   const log = (text: string) => setAudit((a) => [text, ...a]);
@@ -188,7 +204,7 @@ export default function WorkspaceViews({
         .toLocaleLowerCase('pt')
         .includes(search.toLocaleLowerCase('pt')),
   );
-  const rank = rankings(players, games);
+  const rank = rankings(players, games, month);
   const name = (id: string) =>
     players.find((p) => p.id === id)?.name ?? 'Jogador removido';
   const teams = (g: Game, team: 'a' | 'b') => g[team].map(name).join(' / ');
@@ -301,10 +317,8 @@ export default function WorkspaceViews({
       const available = courts.filter((c) => c.active);
       if (!available.length)
         throw new Error('Adiciona pelo menos um campo ativo.');
-      if (!roundDate || !roundDate.startsWith('2026-09'))
-        throw new Error(
-          'Escolhe uma data de setembro de 2026, o mês desta demonstração.',
-        );
+      if (!roundDate || !roundDate.startsWith(month))
+        throw new Error('Escolhe uma data no mês ativo.');
       if (games.some((g) => g.round !== nextRound && !g.winner))
         throw new Error(
           'Conclui os resultados da ronda anterior antes de preparar outra.',
@@ -364,13 +378,13 @@ export default function WorkspaceViews({
   function saveGame() {
     if (!editGame) return;
     if (
-      !editGame.date.startsWith('2026-09') ||
+      !editGame.date.startsWith(month) ||
       !editGame.time ||
       editGame.duration < 15 ||
       editGame.duration > 240
     ) {
       setError(
-        'Indica data em setembro, hora e duração entre 15 e 240 minutos.',
+        'Indica data no mês ativo, hora e duração entre 15 e 240 minutos.',
       );
       return;
     }
@@ -614,7 +628,11 @@ export default function WorkspaceViews({
           )}
           <div className="table-bottom">
             <span>{filtered.length} registos</span>
-            <span>Os números e nomes são fictícios nesta demonstração.</span>
+            <span>
+              {live
+                ? 'Dados dos jogadores registados.'
+                : 'Os números e nomes são fictícios nesta demonstração.'}
+            </span>
           </div>
         </section>
       )}
@@ -643,7 +661,7 @@ export default function WorkspaceViews({
                     </Badge>{' '}
                     Classificação individual
                   </h2>
-                  <span className="muted">Setembro · provisória</span>
+                  <span className="muted">{month} · provisória</span>
                 </div>
                 <Table>
                   <TableHeader>
@@ -787,8 +805,8 @@ export default function WorkspaceViews({
                 <Input
                   type="date"
                   value={roundDate}
-                  min="2026-09-01"
-                  max="2026-09-30"
+                  min={month + '-01'}
+                  max={month + '-' + monthEnd}
                   onChange={(e) => setRoundDate(e.target.value)}
                 />
               </Field>
@@ -858,7 +876,10 @@ export default function WorkspaceViews({
                     );
                   }}
                 >
-                  <Check size={16} /> Finalizar demonstração
+                  <Check size={16} />{' '}
+                  {live
+                    ? 'Preparar publicação no grupo'
+                    : 'Finalizar demonstração'}
                 </Button>
               </div>
               <div className="games-grid">
@@ -1005,7 +1026,7 @@ export default function WorkspaceViews({
           <section className="panel">
             <div className="section-heading">
               <h2>Histórico mensal</h2>
-              <Badge tone="neutral">Setembro em curso</Badge>
+              <Badge tone="neutral">{month} em curso</Badge>
             </div>
             <Blank
               title="Ainda não há meses concluídos"
@@ -1024,9 +1045,7 @@ export default function WorkspaceViews({
                 ))}
               </ul>
             ) : (
-              <p className="muted">
-                As alterações feitas nesta demonstração aparecem aqui.
-              </p>
+              <p className="muted">As alterações registadas aparecem aqui.</p>
             )}
           </section>
         </>
@@ -1087,7 +1106,9 @@ export default function WorkspaceViews({
               {editPlayer?.id ? 'Ficha do jogador' : 'Nova inscrição'}
             </DialogTitle>
             <DialogDescription>
-              Dados de demonstração. Nenhum contacto será efetuado.
+              {live
+                ? 'Dados do jogador. As alterações entram em vigor após guardar no backoffice.'
+                : 'Dados de demonstração. Nenhum contacto será efetuado.'}
             </DialogDescription>
           </DialogHeader>
           {editPlayer && (
@@ -1334,8 +1355,8 @@ export default function WorkspaceViews({
                     required
                     type="date"
                     value={editGame.date}
-                    min="2026-09-01"
-                    max="2026-09-30"
+                    min={month + '-01'}
+                    max={month + '-' + monthEnd}
                     onChange={(e) =>
                       setEditGame({ ...editGame, date: e.target.value })
                     }

@@ -2125,3 +2125,10 @@ h1 {
 .rules-page{min-height:100dvh;background:#f5f8fa;color:#103b52}.rules-page header,.rules-page footer{max-width:960px;margin:auto;padding:28px 24px;display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}.rules-page header .ultimate-logo{width:200px}.rules-page header>span{font-size:12px;letter-spacing:.15em}.rules-intro{padding:48px max(24px,calc((100vw - 912px)/2));background:#103b52;color:white}.rules-intro>p:first-child{color:#caff00;font-size:12px;letter-spacing:.2em}.rules-intro h1{font-size:clamp(34px,6vw,56px);letter-spacing:-.04em;margin:16px 0}.rules-intro p{line-height:1.7}.rules-content{max-width:912px;margin:32px auto;padding:0 24px}.rules-content>section{display:flex;gap:22px;padding:28px 0;border-bottom:1px solid #d9e3e9}.rules-number{font-weight:700;color:#547487;padding-top:4px}.rules-content h2{font-size:22px;margin:0 0 12px}.rules-content p{font-size:16px;line-height:1.8;color:#455c6a;margin:0}.rules-content table{width:100%;margin-top:22px;font-size:14px;border-collapse:collapse}.rules-content caption{text-align:left;font-weight:600;margin-bottom:10px}.rules-content th,.rules-content td{text-align:left;padding:12px 8px;border-bottom:1px solid #d9e3e9}.rules-page footer a{font-weight:600}.rules-page footer p{font-size:13px;color:#547487}
 
 .substitutions-panel{margin-bottom:24px}.substitution-form{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin:24px 0}.substitution-form .field{flex:1;min-width:180px}.substitutions-panel select{width:100%;padding:12px;border:1px solid #d9e3e9;background:white;border-radius:8px;font:inherit}.substitution-vacancy{padding:22px;border:1px solid #d9e3e9;border-radius:12px;margin:16px 0}.substitution-vacancy h3{font-size:18px;margin:0 0 8px}.substitution-vacancy p{line-height:1.6;color:#527083}
+
+/* Match the logo's original white canvas across the entire rules header. */
+.rules-page header {
+  max-width: none;
+  background: #fff;
+  padding: 28px max(24px, calc((100% - 912px) / 2));
+}

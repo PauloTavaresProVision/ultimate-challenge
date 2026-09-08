@@ -51,6 +51,27 @@ export class WhatsApp {
     });
   }
   connectedAt: string | null = null;
+  private async diagnose(sock: WASocket) {
+    const [restriction, quota] = await Promise.allSettled([
+      sock.fetchAccountReachoutTimelock(), sock.fetchNewChatMessageCap(),
+    ]);
+    const recent = await db.outbox.findMany({where:{kind:{in:['test','invitation']}},orderBy:{createdAt:'desc'},take:10,select:{recipient:true}});
+    const contacts = [];
+    for (const pn of [...new Set(recent.map(r=>r.recipient))].slice(0,5)) {
+      const lid = await sock.signalRepository.lidMapping.getLIDForPN(pn);
+      const ids = lid ? [pn,lid] : [pn];
+      const tokens = await sock.authState.keys.get('tctoken',ids);
+      contacts.push({phoneSuffix:pn.split('@')[0].slice(-4),hasLid:!!lid,tokens:ids.map(id=>({address:id===pn?'phone':'lid',present:!!tokens[id]?.token?.length,timestamp:tokens[id]?.timestamp??null}))});
+    }
+    const result = {
+      checkedAt:new Date().toISOString(),
+      restriction:restriction.status==='fulfilled'?restriction.value:{unavailable:true},
+      quota:quota.status==='fulfilled'?quota.value:{unavailable:true},
+      contacts,
+    };
+    console.info('WhatsApp diagnóstico:',JSON.stringify(result));
+    await db.setting.upsert({where:{key:'whatsapp-diagnostics'},create:{key:'whatsapp-diagnostics',value:JSON.stringify(result)},update:{value:JSON.stringify(result)}});
+  }
   get account() {
     const user = this.socket?.user;
     return this.status === 'connected' && user
@@ -152,6 +173,7 @@ export class WhatsApp {
           this.lastError = null;
           this.qr = null;
           this.failures = 0;
+          void this.diagnose(sock).catch(()=>console.error('WhatsApp diagnóstico: não foi possível concluir a consulta.'));
         }
         if (update.connection === 'close') {
           this.qr = null;

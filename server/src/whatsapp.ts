@@ -1,3 +1,4 @@
+import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
 import { joinApprovedPlayer } from './group-join.ts';
 import makeWASocket, {
@@ -139,6 +140,20 @@ export class WhatsApp {
           }
         }
       });
+      sock.ev.on('group-participants.update', event => {
+        if(generation !== this.generation || event.action !== 'add')return;
+        void (async()=>{
+          const selected=await db.setting.findUnique({where:{key:'whatsapp_group'}});
+          if(selected?.value!==event.id)return;
+          const members=event.participants;
+          let jids=members.flatMap(p=>[p.id,p.phoneNumber??'']);
+          if(members.some(p=>!phoneFromJid(p.id)&&!phoneFromJid(p.phoneNumber))){
+            const metadata=await sock.groupMetadata(event.id);
+            jids=jids.concat(metadata.participants.filter(p=>members.some(m=>m.id===p.id)).flatMap(p=>[p.id,p.phoneNumber??'']));
+          }
+          await queueWelcome(event.id,jids);
+        })().catch(()=>console.error('Não foi possível preparar as boas-vindas.'));
+      });
       sock.ev.on('messages.upsert', ({ messages, type }) => {
         if (type !== 'notify') return;
         for (const message of messages) {
@@ -274,6 +289,9 @@ export class WhatsApp {
       });
       if (!claim.count) return;
       try {
+        if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
+          await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
+        }
         if(row.kind === 'group_join') {
           const payload=JSON.parse(decrypt(row.encryptedBody,config.MESSAGE_KEY)) as {playerId:string;group:string;text:string};
           const player=await db.player.findUnique({where:{id:payload.playerId}});
@@ -282,6 +300,7 @@ export class WhatsApp {
             await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
           }
           const outcome=await joinApprovedPlayer(this.socket,payload.group,row.recipient);
+          if(outcome==='added')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite')await this.socket.sendMessage(row.recipient,{text:payload.text});
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;

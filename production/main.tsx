@@ -1,3 +1,4 @@
+import RulesPage from './rules';
 import { PlayerGames, type PlayerGamesData } from './player-games';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect } from 'react';
@@ -328,4 +329,4 @@ function App() {
     </main>
   );
 }
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(location.pathname.replace(/\/$/,'') === '/regras' ? <RulesPage /> : <App />);

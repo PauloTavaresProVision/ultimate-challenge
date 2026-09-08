@@ -8,6 +8,7 @@ import {defaultRules,type PublicRules} from '../../lib/public-rules.ts';
 import {todayLuanda,vacancies} from './substitutions.ts';
 import {classifyQuestion} from './bot-intent.ts';
 import {mentionedReply} from './bot-message.ts';
+import {rosterReply} from './bot-roster.ts';
 export async function botEnabled(){return (await db.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false';}
 async function budget(playerId:string){
  const hour=new Date().toISOString().slice(0,13),minute=new Date().toISOString().slice(0,16);
@@ -22,7 +23,12 @@ export async function answerQuestion(playerId:string,text:string,classifier=clas
  const today=todayLuanda(),origin=config.APP_ORIGIN.replace(/\/$/,'');
  if(intent.intent==='silent')return null;
  if(intent.intent==='schedule_notice')return 'Sim! Assim que tivermos a data e os horários definidos, comunicamos aqui no grupo com antecedência.';
- if(intent.intent==='clarify')return 'Podes indicar a tua pergunta sobre os jogos, pontos ou regras? Para registar resultados, usa '+origin+'/jogos. Alterações precisam da organização.';
+ if(intent.intent==='clarify')return 'Não consegui perceber exatamente o que queres consultar. Podes reformular? Consigo consultar os jogadores inscritos por divisão, jogos, horários, pontos, classificação e regras.';
+ if(intent.intent==='players') {
+  const division=intent.division==='mine'?player.division:intent.division;
+  const members=await db.player.findMany({where:{division,status:'Ativo',verified:true},select:{name:true,side:true},orderBy:{name:'asc'}});
+  return rosterReply(division,members);
+ }
  if(intent.intent==='help')return 'Consulta os teus jogos e regista vitória ou derrota em '+origin+'/jogos. Entra com o teu número WhatsApp e o código de validação. Inscrições e substituições dependem da organização.';
  if(intent.intent==='rules'){const section=rules.sections[intent.section];return (section?section.title+'\n'+section.text:'Consulta o regulamento do Ultimate Challenge.')+'\n\nVer regras: '+origin+'/regras';}
  if(intent.intent==='movements'){const row=await db.setting.findUnique({where:{key:'competition:status'}});const status=row?JSON.parse(row.value):null;return status?.blocked?'As movimentações estão pendentes: '+status.blocked:status?.nextMovement?'Próximas subidas e descidas previstas: '+status.nextMovement+'.':'Ainda não há data de movimentações definida. A organização precisa de publicar a primeira ronda.';}

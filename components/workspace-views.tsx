@@ -1,4 +1,5 @@
 'use client';
+import { weeklySchedule } from '@/lib/tournament';
 import OpenAISettings from './openai-settings';
 import CompetitionLive from './competition-live';
 import {
@@ -345,31 +346,16 @@ export default function WorkspaceViews({
         prior,
         nextRound,
       );
-      const generated = pairs.map((p, i): Game => {
-        const minutes = 18 * 60 + Math.floor(i / available.length) * 90;
-        if (minutes + 90 > 24 * 60)
-          throw new Error(
-            'Não há horários suficientes no dia. Ativa mais campos ou reduz os participantes.',
-          );
-        return {
-          ...p,
-          id: crypto.randomUUID(),
-          round: nextRound,
-          court: available[i % available.length].id,
-          date: roundDate,
-          time: `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`,
-          duration: 90,
-          winner: null,
-          published: false,
-        };
-      });
+      const generated = weeklySchedule(pairs, available, nextRound, roundDate);
       if (generated.some((g) => conflict(g, [...prior, ...generated])))
         throw new Error(
           'Existe conflito de campo ou jogador no horário proposto.',
         );
+      const encounters = generated.map(g=>[...g.a,...g.b].sort().join('|'));
+      const repeated = encounters.length - new Set(encounters).size;
       setGames([...prior, ...generated]);
       inform(
-        `Ronda ${nextRound} sorteada: ${generated.length} jogos, sem repetir parceiros da ronda anterior.`,
+        `Ronda ${nextRound} sorteada: ${generated.length} jogos de 20 minutos, dupla fixa. ${repeated ? repeated + " confrontos repetidos por limitação de duplas/campos." : "Sem repetir adversários."}`,
       );
       log(`Ronda ${nextRound} sorteada.`);
     } catch (e) {
@@ -796,8 +782,7 @@ export default function WorkspaceViews({
               <div>
                 <h2>Preparar a ronda {String(nextRound).padStart(2, '0')}</h2>
                 <p>
-                  O sorteio abrange as três divisões. Cada jogador participa uma
-                  vez.
+                  O sorteio abrange as três divisões. Cada jogador faz quatro jogos de 20 minutos, com dupla fixa e rotação de campos.
                 </p>
               </div>
               <Badge tone="neutral">Rascunho</Badge>
@@ -1070,7 +1055,7 @@ export default function WorkspaceViews({
                 ['Derrota', '1 ponto'],
                 [
                   'Bónus de sequência',
-                  '+1 em cada vitória após a primeira consecutiva',
+                  '+1 em cada vitória consecutiva; reinicia em cada semana',
                 ],
                 ['Duplas', 'Não repetir na semana seguinte'],
                 ['Vencedores mensais', '1 por divisão · 3 no total'],

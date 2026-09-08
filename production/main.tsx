@@ -150,9 +150,15 @@ function App() {
       </main>
     );
   return (
-    <main className="auth-page">
+    <main className="auth-page auth-redesign">
+      <aside className="auth-brand" aria-label="Ultimate Challenge">
+        <div className="ultimate-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
+        <div className="auth-court" aria-hidden="true"><i /><b /></div>
+        <div className="auth-brand-caption"><span>PREMIER PADEL CLUB</span><strong>O teu próximo<br />desafio começa aqui.</strong><p>M1+ <span>·</span> M1 <span>·</span> M2</p></div>
+      </aside>
       <section className="panel auth-card">
         <div className="ultimate-logo auth-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
+        <span className="auth-eyebrow">ULTIMATE CHALLENGE</span>
         <h1>
           {step === 'code'
             ? 'Valida o teu WhatsApp'
@@ -160,14 +166,14 @@ function App() {
               ? 'Entra no Ultimate Challenge'
               : playerLogin
                 ? 'Os teus jogos'
-                : 'Área da organização'}
+                : 'Bem-vindo de volta'}
         </h1>
         <p className="subtitle">
           {step === 'code'
             ? 'Introduz o código de 6 dígitos recebido no WhatsApp.'
             : registration
               ? 'Preenche os teus dados. A entrada depende da aprovação da organização.'
-              : 'Inicia sessão para continuar.'}
+              : 'Acede à tua área para acompanhar o torneio.'}
         </p>
         <form onSubmit={submit}>
           <div className="form-grid">

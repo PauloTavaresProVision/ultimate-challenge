@@ -2092,3 +2092,30 @@ h1 {
 .next-round > p { color:#acc5d2; }
 .next-round .round-icon { color:#d4f73d; border-color:#507180; }
 .auth-logo { max-width:260px; margin-bottom:25px; }
+
+/* Ultimate Challenge access: club identity with a focused, responsive form. */
+.auth-redesign { min-height:100dvh; display:grid; grid-template-columns:minmax(0,1fr) minmax(400px,1fr); padding:0; background:#fff; align-items:stretch; }
+.auth-brand { background:#0a3045; color:#fff; position:relative; overflow:hidden; min-height:100dvh; padding:48px; display:flex; flex-direction:column; justify-content:space-between; }
+.auth-brand .ultimate-logo { width:230px; max-width:100%; border-radius:0; z-index:1; }
+.auth-brand-caption { position:relative; z-index:1; padding-top:240px; }
+.auth-brand-caption > span { color:#caff00; letter-spacing:.18em; font-size:12px; font-weight:700; }
+.auth-brand-caption strong { display:block; font-size:clamp(32px,4vw,64px); line-height:1.08; letter-spacing:-.045em; margin:22px 0; max-width:560px; }
+.auth-brand-caption p { font-size:16px; color:#d8e5ed; letter-spacing:.15em; }
+.auth-brand-caption p span { color:#caff00; padding:0 16px; }
+.auth-court { position:absolute; width:70%; height:58%; top:19%; left:42%; border:2px solid #a1c0d133; transform:rotate(-24deg); }
+.auth-court:before,.auth-court:after { content:''; position:absolute; left:0; right:0; border-top:2px solid #a1c0d133; top:25%; }
+.auth-court:after { top:75%; }
+.auth-court i { position:absolute; top:25%; bottom:25%; left:50%; border-left:2px solid #a1c0d133; }
+.auth-court b { position:absolute; width:28px; height:28px; background:#caff00; border-radius:50%; bottom:12%; left:22%; box-shadow:0 0 60px #caff0050; }
+.auth-redesign .auth-card { width:min(100%,490px); max-width:none; margin:auto; padding:64px 44px; border:0; border-radius:0; box-shadow:none; background:#fff; }
+.auth-redesign .auth-card .auth-logo { display:none; }
+.auth-eyebrow { display:block; font-size:12px; font-weight:700; letter-spacing:.17em; color:#527083; margin-bottom:16px; }
+.auth-redesign .auth-card h1 { font-size:34px; line-height:1.15; letter-spacing:-.04em; color:#103b52; margin:0 0 14px; }
+.auth-redesign .auth-card .subtitle { color:#607382; line-height:1.6; margin-bottom:36px; }
+.auth-redesign .form-grid { gap:22px; }
+.auth-redesign .field { color:#244459; font-size:14px; gap:9px; }
+.auth-redesign input { min-height:50px; border-radius:10px; background:#f8fafc; border-color:#d9e3e9; font-size:16px; }
+.auth-redesign .dialog-actions { margin-top:28px; }
+.auth-redesign .dialog-actions button { width:100%; min-height:50px; border-radius:10px; background:#103b52; color:white; font-weight:600; }
+.auth-redesign .dialog-actions button:hover { background:#19506d; }
+@media(max-width:760px) { .auth-redesign { display:flex; flex-direction:column; } .auth-brand { min-height:0; padding:24px; } .auth-brand .ultimate-logo { width:180px; } .auth-brand-caption { padding-top:28px; } .auth-brand-caption strong { font-size:28px; margin:12px 0; } .auth-brand-caption p { display:none; } .auth-court { top:-20%; height:180%; } .auth-redesign .auth-card { padding:36px 24px; margin:0 auto; } .auth-redesign .auth-card h1 { font-size:29px; } }

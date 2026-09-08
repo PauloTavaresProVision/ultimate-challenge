@@ -6,6 +6,7 @@ import {
   rankings,
   draw,
   conflict,
+  weeklySchedule,
 } from '../lib/tournament.ts';
 test('Sorteios preservam lados, divisão e unicidade, sem repetir parceiros', () => {
   for (let n = 0; n < 100; n++) {
@@ -47,7 +48,8 @@ test('3, 7, 11, 15 pontos em sequências de vitória e 1 na derrota', () => {
   const games = Array.from({ length: 4 }, (_, i) => ({
     ...initialGames[0],
     id: `t${i}`,
-    date: `2026-09-${String(1 + i * 7).padStart(2, '0')}`,
+    date: '2026-09-01',
+    time: `18:${String(i * 10).padStart(2,'0')}`,
     winner: 'a',
   }));
   for (let n = 1; n <= 4; n++)
@@ -86,4 +88,30 @@ test('Correção recalcula pontos sem os duplicar', () => {
   assert.equal(before.points, 3);
   assert.equal(after.points, 1);
   assert.equal(after.wins, 0);
+});
+
+test('Four games keep partners, rotate courts and avoid overlaps', () => {
+  const games=weeklySchedule(draw(initialPlayers,initialGames,2),[{id:'c1'},{id:'c2'},{id:'c3'}],2,'2026-09-12');
+  assert.equal(games.length,24);
+  for(const p of initialPlayers.filter(p=>p.status==='Ativo')) {
+    const own=games.filter(g=>[...g.a,...g.b].includes(p.id));
+    assert.equal(own.length,4);
+    assert.equal(new Set(own.map(g=>(g.a.includes(p.id)?g.a:g.b).join('|'))).size,1);
+    own.forEach((g,i)=> { assert.equal(g.duration,20); assert(!conflict(g,games)); if(i)assert.notEqual(g.court,own[i-1].court); });
+  }
+  assert.throws(()=>weeklySchedule(draw(initialPlayers,initialGames,2),[{id:'c1'}],2,'2026-09-12'),/dois campos/);
+});
+test('Weekly bonuses reset, losses break streaks and unresolved games cannot bridge wins',()=>{
+  const games=Array.from({length:8},(_,i)=>({...initialGames[0],id:'w'+i,round:i<4?1:2,date:i<4?'2026-09-01':'2026-09-08',time:'18:'+String((i%4)*10).padStart(2,'0'),winner:'a'}));
+  assert.equal(rankings(initialPlayers,games)[0].points,30);
+  const own=games.slice(0,4); own[1].winner='b';own[2].winner='b';
+  assert.equal(rankings(initialPlayers,own).find(p=>p.id==='p0').points,8);
+  own[1].winner=null;own[2].winner=null;
+  assert.equal(rankings(initialPlayers,own).find(p=>p.id==='p0').points,6);
+});
+
+test('Opponent rotation finds distinct opponents with four courts and four teams',()=>{
+ const games=weeklySchedule(draw(initialPlayers.slice(0,8),[],1),[{id:'a'},{id:'b'},{id:'c'},{id:'d'}],1,'2026-09-01');
+ const own=games.filter(g=>[...g.a,...g.b].includes('p0'));
+ assert.equal(new Set(own.map(g=>(g.a.includes('p0')?g.b:g.a).slice().sort().join('|'))).size,3);
 });

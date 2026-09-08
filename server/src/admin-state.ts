@@ -95,15 +95,17 @@ export function installAdminState(
           bad('Parceiros repetidos na ronda seguinte.');
       }
       if (conflict(g, data.games)) bad('Conflito de campo ou jogador.');
-      if (
-        data.games.some(
-          (other) =>
-            other.id !== g.id &&
-            other.round === g.round &&
-            [...other.a, ...other.b].some((id) => ids.includes(id)),
-        )
-      )
-        bad('O jogador só pode jogar uma vez por ronda.');
+      for (const id of ids) {
+        const appearances = data.games.filter(other => other.round === g.round && [...other.a, ...other.b].includes(id));
+        if (appearances.length > 4) bad('Cada jogador pode fazer no máximo quatro jogos por ronda.');
+        const pair = (g.a.includes(id) ? g.a : g.b).slice().sort().join('|');
+        if (appearances.some(other => (other.a.includes(id) ? other.a : other.b).slice().sort().join('|') !== pair))
+          bad('A dupla deve manter-se fixa nos quatro jogos da ronda.');
+        if (appearances.length > 1 && appearances.some(other => other.duration !== 20 || other.date !== g.date))
+          bad('Os quatro jogos devem durar 20 minutos e acontecer no mesmo dia.');
+        if (g.published && appearances.length !== 1 && appearances.length !== 4)
+          bad('Publica os quatro jogos da ronda em conjunto.');
+      }
     }
     let invite: string | null = null;
     const prior = await db.player.findMany();
@@ -179,6 +181,15 @@ export function installAdminState(
         await tx.court.upsert({ where: { id }, create: c, update: fields });
       }
       const oldGames = await tx.game.findMany();
+      for (const g of data.games) {
+        if (oldGames.some(old => old.round === g.round && old.duration !== 20)) continue;
+        for (const id of [...g.a, ...g.b]) {
+          const own = data.games.filter(x => x.round === g.round && [...x.a, ...x.b].includes(id)).sort((a,b)=>a.time.localeCompare(b.time));
+          if (own.some(x=>x.published !== g.published)) bad('Publica os quatro jogos da ronda em conjunto.');
+          if (own.length !== 4 || own.some(x=>x.duration !== 20)) bad('A ronda deve ter quatro jogos de 20 minutos por jogador.');
+          if (own.some((x,i)=>i>0 && x.court===own[i-1].court)) bad('A dupla deve mudar de campo entre jogos.');
+        }
+      }
       const closedMonths = await tx.setting.findMany({where:{key:{startsWith:'competition:month:'}}});
       const closed = new Set(closedMonths.map(m=>m.key.slice('competition:month:'.length)));
       for(const g of data.games) {

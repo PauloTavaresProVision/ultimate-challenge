@@ -20,6 +20,7 @@ export async function answerQuestion(playerId:string,text:string,classifier=clas
  const intent=await classifier(decrypt(key.value,config.MESSAGE_KEY),text,rules.sections.map(s=>s.title));
  const today=todayLuanda(),origin=config.APP_ORIGIN.replace(/\/$/,'');
  if(intent.intent==='silent')return null;
+ if(intent.intent==='schedule_notice')return 'Sim! Assim que tivermos a data e os horários definidos, comunicamos aqui no grupo com antecedência.';
  if(intent.intent==='clarify')return 'Podes indicar a tua pergunta sobre os jogos, pontos ou regras? Para registar resultados, usa '+origin+'/jogos. Alterações precisam da organização.';
  if(intent.intent==='help')return 'Consulta os teus jogos e regista vitória ou derrota em '+origin+'/jogos. Entra com o teu número WhatsApp e o código de validação. Inscrições e substituições dependem da organização.';
  if(intent.intent==='rules'){const section=rules.sections[intent.section];return (section?section.title+'\n'+section.text:'Consulta o regulamento do Ultimate Challenge.')+'\n\nVer regras: '+origin+'/regras';}

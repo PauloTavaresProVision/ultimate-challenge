@@ -207,6 +207,17 @@ export default function Backoffice({
             <strong>{view}</strong>
           </div>
           <div className="top-actions">
+            {liveState && (
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await fetch('/api/logout', { method: 'POST' });
+                  location.reload();
+                }}
+              >
+                Sair
+              </Button>
+            )}
             <span className="connection">
               <span className="offline-dot" />{' '}
               {liveState ? 'WhatsApp · Baileys' : 'WhatsApp desligado'}
@@ -230,27 +241,6 @@ export default function Backoffice({
             </span>
           </div>
           <div className="page-heading">
-            {liveState && (
-              <div>
-                <Button disabled={saving} onClick={save}>
-                  {saving ? 'A guardar…' : 'Guardar alterações'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    await fetch('/api/logout', { method: 'POST' });
-                    location.reload();
-                  }}
-                >
-                  Sair
-                </Button>
-                {saveNote && (
-                  <p role="status" className="subtitle">
-                    {saveNote}
-                  </p>
-                )}
-              </div>
-            )}
             <div>
               <p className="eyebrow">O TEU TORNEIO, EM JOGO</p>
               <h1>{view}</h1>
@@ -260,13 +250,30 @@ export default function Backoffice({
                   : 'Gere o teu torneio Escada.'}
               </p>
             </div>
-            <Button
-              className="primary-action"
-              onClick={() => setView('Rondas e sorteios')}
-            >
-              <Plus size={17} /> Preparar ronda
-            </Button>
+            <div className="heading-actions">
+              {liveState && (
+                <Button
+                  variant="outline"
+                  className="primary-action"
+                  disabled={saving}
+                  onClick={save}
+                >
+                  {saving ? 'A guardar…' : 'Guardar alterações'}
+                </Button>
+              )}
+              <Button
+                className="primary-action"
+                onClick={() => setView('Rondas e sorteios')}
+              >
+                <Plus size={17} /> Preparar ronda
+              </Button>
+            </div>
           </div>
+          {saveNote && (
+            <p role="status" className="feedback success">
+              {saveNote}
+            </p>
+          )}
           <div className="period-row">
             <div className="period">
               <CalendarDays size={17} />

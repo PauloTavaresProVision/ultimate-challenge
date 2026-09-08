@@ -1932,3 +1932,16 @@ h1 {
 .next-phase p {
   margin-bottom: 15px;
 }
+.heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+  .heading-actions {
+    max-width: 180px;
+    gap: 8px;
+  }
+}

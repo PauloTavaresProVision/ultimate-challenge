@@ -17,6 +17,7 @@ import {
   InputOTPSlot,
 } from '../components/ui/input-otp';
 import '../app/globals.css';
+import './fonts.css';
 function App() {
   const [me, setMe] = useState<{ role: string; status?: string } | null>(null);
   const [state, setState] = useState<LiveState | null>(null);

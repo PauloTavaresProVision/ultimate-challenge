@@ -1,0 +1,30 @@
+import { useEffect, useState } from 'react';
+import { Clock, Send, RefreshCw, Check, X } from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { api } from './whatsapp-live';
+type Delivery={mode:'immediate'|'scheduled';hoursBefore:number};
+type Message={id:string;kind:string;status:string;attempts:number;createdAt:string;sentAt:string|null;nextAttemptAt:string;expiresAt:string};
+const labels:Record<string,string>={pending:'Pendente',sending:'A enviar',sent:'Enviada',uncertain:'Sem confirmação',expired:'Expirada',cancelled:'Cancelada'};
+const kinds:Record<string,string>={test:'Teste de ligação',round:'Jogos do torneio',approval:'Convite para o grupo',otp:'Código de validação',verification:'Código de validação'};
+const date=(v:string)=>new Date(v).toLocaleString('pt-PT',{timeZone:'Africa/Luanda',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+export default function MessageCenter(){
+ const [setting,setSetting]=useState<Delivery|null>(null);const [messages,setMessages]=useState<Message[]>([]);const [error,setError]=useState('');const [note,setNote]=useState('');const [busy,setBusy]=useState('');const [filter,setFilter]=useState('all');
+ async function refresh(){setMessages(await api<Message[]>('/admin/messages'));}
+ useEffect(()=>{let active=true;api<Delivery>('/admin/message-delivery').then(s=>{if(active)setSetting(s);}).catch(e=>{if(active)setError(e.message);});const poll=()=>api<Message[]>('/admin/messages').then(s=>{if(active)setMessages(s);}).catch(e=>{if(active)setError(e.message);});void poll();const t=setInterval(poll,10000);return()=>{active=false;clearInterval(t);};},[]);
+ const visible=messages.filter(m=>filter==='all'||(filter==='pending'?['pending','sending'].includes(m.status):['uncertain','expired'].includes(m.status)));
+ return <div className="message-center">
+ <section className="wa-card"><header className="wa-card-heading"><div className="wa-icon"><Clock size={20}/></div><div><h2>Quando enviar os jogos</h2><p>Define o envio das próximas rondas publicadas.</p></div></header>
+ {setting&&<form onSubmit={async e=>{e.preventDefault();setBusy('save');setError('');setNote('');try{await api('/admin/message-delivery','PUT',setting);setNote('Preferência guardada para as próximas publicações.');}catch(e){setError((e as Error).message);}finally{setBusy('');}}}>
+ <div className="message-modes" role="group" aria-label="Momento do envio"><Button type="button" variant={setting.mode==='immediate'?'default':'outline'} aria-pressed={setting.mode==='immediate'} onClick={()=>setSetting({...setting,mode:'immediate'})}><Send size={15}/>Ao publicar</Button><Button type="button" variant={setting.mode==='scheduled'?'default':'outline'} aria-pressed={setting.mode==='scheduled'} onClick={()=>setSetting({...setting,mode:'scheduled'})}><Clock size={15}/>Antes dos jogos</Button></div>
+ {setting.mode==='scheduled'&&<label className="message-hours">Enviar<Input type="number" min={1} max={168} required value={setting.hoursBefore} onChange={e=>setSetting({...setting,hoursBefore:e.target.valueAsNumber})}/>horas antes do primeiro jogo</label>}
+ <p className="wa-footnote">{setting.mode==='scheduled'?'O horário usa a hora de Luanda. Se já faltarem menos horas, o envio fica disponível ao publicar. Mensagens não enviadas expiram quando começa o primeiro jogo.':'A mensagem entra na fila quando publicas e guardas a ronda.'} Esta opção não altera mensagens já agendadas.</p>
+ <div className="wa-group-footer"><span>O WhatsApp precisa de estar ligado no momento do envio.</span><Button disabled={!!busy} type="submit">{busy==='save'?'A guardar…':'Guardar preferência'}</Button></div></form>}
+ </section>
+ <section className="wa-card"><header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div><h2>Mensagens</h2><p>Últimos 50 envios · atualização automática</p></div><Button variant="ghost" size="icon" aria-label="Atualizar mensagens" disabled={!!busy} onClick={async()=>{setBusy('refresh');try{await refresh();}catch(e){setError((e as Error).message);}finally{setBusy('');}}}><RefreshCw size={16}/></Button></header>
+ <div className="message-filters" role="group" aria-label="Filtrar mensagens">{[['all','Todas'],['pending','Em espera'],['attention','A verificar']].map(([id,label])=><Button key={id} variant={filter===id?'secondary':'ghost'} aria-pressed={filter===id} onClick={()=>setFilter(id)}>{label}</Button>)}</div>
+ {!visible.length?<p className="competition-note">Não há mensagens nesta lista.</p>:<div className="message-list">{visible.map(m=><div key={m.id} className="message-row"><div className={`message-dot ${m.status}`}/><div className="message-description"><strong>{kinds[m.kind]??'Mensagem WhatsApp'}</strong><small>{m.kind==='round'?'Grupo do torneio':'Mensagem privada'} · {m.sentAt?`Enviada ${date(m.sentAt)}`:m.status==='pending'?`${new Date(m.nextAttemptAt)>new Date()?'Agendada para':'Em fila desde'} ${date(m.nextAttemptAt)}`:`Criada ${date(m.createdAt)}`}</small>{m.status==='uncertain'&&<small>Confirma no WhatsApp antes de fazer um novo envio.</small>}</div><span className="message-status">{m.status==='pending'&&new Date(m.nextAttemptAt)>new Date()?'Agendada':labels[m.status]??m.status}</span>{m.kind==='round'&&m.status==='pending'&&<Button variant="ghost" disabled={!!busy} onClick={async()=>{setBusy(m.id);setError('');try{await api(`/admin/messages/${encodeURIComponent(m.id)}/cancel`,'POST');await refresh();}catch(e){setError((e as Error).message);}finally{setBusy('');}}}><X size={14}/>Cancelar</Button>}</div>)}</div>}
+ <p className="wa-footnote">“Enviada” indica que o WhatsApp aceitou o envio; não confirma a leitura. Os códigos de validação não são mostrados aqui.</p></section>
+ {error&&<p className="form-error" role="alert">{error}</p>}{note&&<p className="wa-success" role="status"><Check size={15}/>{note}</p>}
+ </div>;
+}

@@ -1,3 +1,4 @@
+import { PlayerGames, type PlayerGamesData } from './player-games';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect } from 'react';
 import Backoffice, { type LiveState } from '../components/backoffice';
@@ -18,6 +19,15 @@ import {
 } from '../components/ui/input-otp';
 import '../app/globals.css';
 import './fonts.css';
+const phoneCountries = [
+  {id:'ao',name:'Angola',dial:'+244'}, {id:'pt',name:'Portugal',dial:'+351'},
+  {id:'br',name:'Brasil',dial:'+55'}, {id:'mx',name:'México',dial:'+52'},
+  {id:'ae',name:'Emirados Árabes Unidos · Dubai',dial:'+971'},
+  {id:'mz',name:'Moçambique',dial:'+258'}, {id:'cv',name:'Cabo Verde',dial:'+238'},
+  {id:'za',name:'África do Sul',dial:'+27'}, {id:'es',name:'Espanha',dial:'+34'},
+  {id:'fr',name:'França',dial:'+33'}, {id:'gb',name:'Reino Unido',dial:'+44'},
+  {id:'us',name:'Estados Unidos',dial:'+1'},
+];
 function App() {
   const [me, setMe] = useState<{ role: string; status?: string } | null>(null);
   const [state, setState] = useState<LiveState | null>(null);
@@ -25,24 +35,23 @@ function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState('form');
-  const [phone, setPhone] = useState('+244');
+  const [countryId, setCountryId] = useState('ao');
+  const [nationalPhone, setNationalPhone] = useState('');
+  const country = phoneCountries.find(c => c.id === countryId)!;
+  const phone = country.dial + nationalPhone;
+  function updatePhone(value: string) {
+    const clean = value.replace(/[\s()-]/g, '');
+    if (clean.startsWith('+') || clean.startsWith('00')) {
+      const international = clean.startsWith('00') ? '+' + clean.slice(2) : clean;
+      const match = [...phoneCountries].sort((a,b) => b.dial.length-a.dial.length).find(c => international.startsWith(c.dial));
+      if (match) { setCountryId(match.id); setNationalPhone(international.slice(match.dial.length).replace(/\D/g,'')); return; }
+    }
+    setNationalPhone(clean.replace(/\D/g,''));
+  }
   const [code, setCode] = useState('');
   const [side, setSide] = useState('Esquerda');
   const [division, setDivision] = useState('M1');
-  const [games, setGames] = useState<{
-    playerId: string;
-    people: { id: string; name: string }[];
-    games: {
-      id: string;
-      division: string;
-      date: string;
-      time: string;
-      court: { name: string };
-      a: string[];
-      b: string[];
-      winner: string | null;
-    }[];
-  } | null>(null);
+  const [games, setGames] = useState<PlayerGamesData | null>(null);
   const registration = location.pathname === '/inscricao';
   const playerLogin = location.pathname === '/jogos';
   async function refresh() {
@@ -112,7 +121,7 @@ function App() {
     return (
       <main className="player-page">
         <div className="section-heading">
-          <h1>Escada · Jogos</h1>
+          <div><div className="ultimate-logo player-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div><h1>Os teus jogos</h1></div>
           <Button
             variant="outline"
             onClick={async () => {
@@ -136,47 +145,19 @@ function App() {
             </p>
           </section>
         ) : (
-          <>
-            <p className="info-note">
-              Nesta etapa, consulta aqui os jogos. A submissão e confirmação de
-              resultados pelos jogadores será ligada na próxima etapa.
-            </p>
-            <div className="games-grid">
-              {games?.games.map((g) => (
-                <section className="panel" key={g.id}>
-                  <span className="badge">{g.division}</span>
-                  <h2>{g.court.name}</h2>
-                  <p>
-                    {g.date} · {g.time}
-                  </p>
-                  <p>
-                    {g.a
-                      .map((id) => games.people.find((p) => p.id === id)?.name)
-                      .join(' / ')}{' '}
-                    ×{' '}
-                    {g.b
-                      .map((id) => games.people.find((p) => p.id === id)?.name)
-                      .join(' / ')}
-                  </p>
-                  <span className="badge">
-                    {g.winner ? 'Concluído' : 'Agendado'}
-                  </span>
-                </section>
-              ))}
-            </div>
-          </>
+          <PlayerGames data={games} refresh={async () => setGames(await api<PlayerGamesData>('/games'))} />
         )}
       </main>
     );
   return (
     <main className="auth-page">
       <section className="panel auth-card">
-        <p className="eyebrow">ESCADA · PADEL</p>
+        <div className="ultimate-logo auth-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
         <h1>
           {step === 'code'
             ? 'Valida o teu WhatsApp'
             : registration
-              ? 'Entra na escada'
+              ? 'Entra no Ultimate Challenge'
               : playerLogin
                 ? 'Os teus jogos'
                 : 'Área da organização'}
@@ -206,17 +187,21 @@ function App() {
                     <Input name="name" required maxLength={100} />
                   </label>
                 )}
-                <label className="field">
-                  WhatsApp com indicativo
-                  <Input
-                    required
-                    type="tel"
-                    value={phone}
-                    onChange={(e) =>
-                      setPhone(e.target.value.replace(/[\s()-]/g, ''))
-                    }
-                  />
-                </label>
+                <div className="field">
+                  <label htmlFor="registration-phone">WhatsApp</label>
+                  <div className="phone-with-country">
+                    <Select value={countryId} onValueChange={v => v && setCountryId(v)}>
+                      <SelectTrigger className="phone-country-trigger" aria-label={`País e indicativo: ${country.name}, ${country.dial}`}>
+                        <img src={`/flags/${country.id}.png`} width={24} height={16} alt="" /><span>{country.dial}</span>
+                      </SelectTrigger>
+                      <SelectContent className="phone-country-menu" align="start" alignItemWithTrigger={false}>
+                        {phoneCountries.map(c => <SelectItem key={c.id} value={c.id} className="phone-country-option"><img src={`/flags/${c.id}.png`} width={24} height={16} alt="" /><span>{c.name}</span><small>{c.dial}</small></SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input id="registration-phone" required type="tel" inputMode="tel" autoComplete="tel-national" placeholder="Número de telemóvel" value={nationalPhone} maxLength={22} pattern="[0-9]{6,14}" onChange={e => updatePhone(e.target.value)} />
+                  </div>
+                  <small className="phone-country-help">{country.name} · Introduz o número sem o indicativo.</small>
+                </div>
                 {registration && (
                   <>
                     <label className="field">

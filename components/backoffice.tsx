@@ -13,7 +13,6 @@ import {
   Settings,
   ArrowUpRight,
   ArrowRight,
-  Plus,
   ChevronRight,
   Check,
   ShieldCheck,
@@ -95,26 +94,8 @@ function Nav({
   return (
     <Sidebar className="escada-sidebar">
       <SidebarHeader>
-        <div className="brand">
-          <span className="brand-mark">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>
-            escada<span className="brand-dot">.</span>
-            <small>PADEL MANAGEMENT</small>
-          </span>
-        </div>
-        <div className="club-switch">
-          <span className="club-icon">
-            <Flag size={17} />
-          </span>
-          <div>
-            Escada Padel<small>Painel da organização</small>
-          </div>
-          <ChevronRight size={15} />
-        </div>
+        <div className="ultimate-logo sidebar-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
+        <p className="brand-caption">PADEL · PAINEL DA ORGANIZAÇÃO</p>
       </SidebarHeader>
       <SidebarContent>
         <p className="nav-label">TORNEIO</p>
@@ -141,10 +122,6 @@ function Nav({
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        <div className="season-note">
-          <span className="live-dot" /> Época 2026
-          <small>Um degrau de cada vez.</small>
-        </div>
         <div className="admin">
           <Avatar name="Administrador" />
           <div>
@@ -247,7 +224,7 @@ export default function Backoffice({
               <p className="subtitle">
                 {view === 'Visão geral'
                   ? 'Tudo a postos para a próxima ronda.'
-                  : 'Gere o teu torneio Escada.'}
+                  : 'Gere o teu torneio Ultimate Challenge.'}
               </p>
             </div>
             <div className="heading-actions">
@@ -261,12 +238,6 @@ export default function Backoffice({
                   {saving ? 'A guardar…' : 'Guardar alterações'}
                 </Button>
               )}
-              <Button
-                className="primary-action"
-                onClick={() => setView('Rondas e sorteios')}
-              >
-                <Plus size={17} /> Preparar ronda
-              </Button>
             </div>
           </div>
           {saveNote && (
@@ -563,7 +534,7 @@ export default function Backoffice({
           )}
           <footer className="page-footer">
             <span>
-              ESCADA <span> / </span> PADEL MANAGEMENT
+              ULTIMATE CHALLENGE <span> / </span> PADEL
             </span>
             <span>Feito para manter o jogo a andar.</span>
           </footer>

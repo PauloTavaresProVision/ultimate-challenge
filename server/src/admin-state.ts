@@ -5,6 +5,7 @@ import { encrypt } from './security.ts';
 import { config } from './config.ts';
 import type { WhatsApp } from './whatsapp.ts';
 import { conflict } from '../../lib/tournament.ts';
+import { deliveryWindow, type Delivery } from './message-schedule.ts';
 const player = z.object({
   id: z.string().min(1).max(64),
   name: z.string().trim().min(2).max(100),
@@ -150,7 +151,7 @@ export function installAdminState(
           }))
         )
           bad(
-            'A mudança de divisão com pontos aguarda definição do regulamento.',
+            'As mudanças de divisão com pontos são feitas automaticamente a cada duas semanas.',
           );
         if (p.status === 'Rejeitado' && !p.note.trim())
           bad('Indica o motivo da rejeição.');
@@ -178,6 +179,16 @@ export function installAdminState(
         await tx.court.upsert({ where: { id }, create: c, update: fields });
       }
       const oldGames = await tx.game.findMany();
+      const closedMonths = await tx.setting.findMany({where:{key:{startsWith:'competition:month:'}}});
+      const closed = new Set(closedMonths.map(m=>m.key.slice('competition:month:'.length)));
+      for(const g of data.games) {
+        const old=oldGames.find(o=>o.id===g.id);
+        if(closed.has(g.date.slice(0,7)) || (old && closed.has(old.date.slice(0,7)))) {
+          if(!old || JSON.stringify({...old,court:old.courtId,courtId:undefined})!==JSON.stringify({...g})) {
+            if(!old || ['date','time','round','division','duration','winner','published'].some(k=>old[k as keyof typeof old]!==g[k as keyof typeof g]) || old.courtId!==g.court || JSON.stringify(old.a)!==JSON.stringify(g.a) || JSON.stringify(old.b)!==JSON.stringify(g.b)) bad('Os jogos de um mês encerrado não podem ser alterados.');
+          }
+        }
+      }
       if (
         oldGames.some(
           (g) => g.published && !data.games.some((x) => x.id === g.id),
@@ -199,6 +210,9 @@ export function installAdminState(
         (g) => g.published && !oldGames.find((x) => x.id === g.id)?.published,
       );
       if (published.length) {
+        const deliverySetting=await tx.setting.findUnique({where:{key:'message_delivery'}});
+        const delivery:Delivery=deliverySetting?JSON.parse(deliverySetting.value):{mode:'immediate',hoursBefore:24};
+        const window=deliveryWindow(delivery,published);
         const group = await tx.setting.findUnique({
           where: { key: 'whatsapp_group' },
         });
@@ -219,7 +233,7 @@ export function installAdminState(
             recipient: group!.value,
             kind: 'round',
             encryptedBody: encrypt(text, config.MESSAGE_KEY),
-            expiresAt: new Date(Date.now() + 86400000),
+            ...window,
           },
         });
       }

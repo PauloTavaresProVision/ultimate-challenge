@@ -44,3 +44,7 @@ server/.data/
 !server/.env.example
 !deploy/.env.example
 server/web/
+production.env
+*.dump
+whatsapp-session*.tar.gz
+deploy/migration/manifest.json

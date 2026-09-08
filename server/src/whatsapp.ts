@@ -6,7 +6,8 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir, rename, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { config } from './config.ts';
 import { db } from './db.ts';
 import { decrypt, phoneFromJid } from './security.ts';
@@ -27,11 +28,45 @@ export class WhatsApp {
     | 'error' = 'disconnected';
   qr: string | null = null;
   private seen = new Map<string, number>();
+  connectedAt: string | null = null;
+  get account() {
+    const user = this.socket?.user;
+    return this.status === 'connected' && user
+      ? { name: user.name || null, phone: phoneFromJid(jidNormalizedUser(user.id)) }
+      : null;
+  }
+  async sendTest(phone: string, text: string) {
+    if (!this.socket || this.status !== 'connected')
+      throw new Error('Liga o WhatsApp antes de enviar o teste.');
+    const row=await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
+    try {
+      const result = await this.socket.sendMessage(row.recipient, { text });
+      if (!result?.key.id) throw new Error('Envio sem confirmação.');
+      const sentAt=new Date();
+      await db.outbox.update({where:{id:row.id},data:{status:'sent',sentAt}});
+      return { sentAt: sentAt.toISOString() };
+    } catch(e) {
+      await db.outbox.update({where:{id:row.id},data:{status:'uncertain'}});
+      throw e;
+    }
+  }
   async connect() {
     if (this.enabled) return;
+    await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
+    const files = await readdir(config.WA_AUTH_DIR);
+    if (this.status === 'logged_out' || files.includes('.requires-qr')) await this.archiveSession();
     this.enabled = true;
     this.failures = 0;
     await this.open();
+  }
+  private async archiveSession() {
+    await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
+    const entries = await readdir(config.WA_AUTH_DIR, { withFileTypes: true });
+    const files = entries.filter(entry => entry.isFile() && (entry.name.endsWith('.json') || entry.name === '.requires-qr'));
+    if (!files.length) return;
+    const backup = join(config.WA_AUTH_DIR, 'backups', `${Date.now()}`);
+    await mkdir(backup, { recursive: true, mode: 0o700 });
+    for (const file of files) await rename(join(config.WA_AUTH_DIR, file.name), join(backup, file.name));
   }
   private async open() {
     const generation = ++this.generation;
@@ -51,6 +86,7 @@ export class WhatsApp {
       });
       this.socket = sock;
       sock.ev.on('creds.update', () => {
+        if (generation !== this.generation) return;
         void saveCreds().catch(() => {
           this.status = 'error';
         });
@@ -62,6 +98,7 @@ export class WhatsApp {
           this.status = 'qr';
         }
         if (update.connection === 'open') {
+          this.connectedAt = new Date().toISOString();
           this.status = 'connected';
           this.qr = null;
           this.failures = 0;
@@ -79,6 +116,8 @@ export class WhatsApp {
             DisconnectReason.forbidden,
           ].includes(code ?? 0);
           if (terminal) {
+            this.generation++;
+            await writeFile(join(config.WA_AUTH_DIR, '.requires-qr'), 'Session rejected; pair again.', { mode: 0o600 }).catch(() => {});
             this.status = 'logged_out';
             this.enabled = false;
             return;
@@ -150,6 +189,11 @@ export class WhatsApp {
       create: { key: 'whatsapp_group', value: id },
       update: { value: id },
     });
+    await db.setting.upsert({
+      where: { key: 'whatsapp_group_name' },
+      create: { key: 'whatsapp_group_name', value: groups.find(g => g.id === id)!.name },
+      update: { value: groups.find(g => g.id === id)!.name },
+    });
   }
   async groupInvite() {
     const group = await db.setting.findUnique({
@@ -219,7 +263,7 @@ export class WhatsApp {
       });
       if (!row) return;
       const claim = await db.outbox.updateMany({
-        where: { id: row.id, status: 'pending' },
+        where: { id: row.id, status: 'pending', expiresAt: { gt: new Date() }, nextAttemptAt: { lte: new Date() } },
         data: { status: 'sending', attempts: { increment: 1 } },
       });
       if (!claim.count) return;

@@ -1,4 +1,6 @@
 'use client';
+import OpenAISettings from './openai-settings';
+import CompetitionLive from './competition-live';
 import {
   useState,
   type Dispatch,
@@ -428,7 +430,7 @@ export default function WorkspaceViews({
       })
       .filter(Boolean);
     setMessage(
-      `🎾 Escada · Ronda ${nextRound}\n\n${sections.join('\n\n──────────\n\n')}\n\nO link de resultados das três divisões será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
+      `🎾 Ultimate Challenge · Ronda ${nextRound}\n\n${sections.join('\n\n──────────\n\n')}\n\nO link de resultados das três divisões será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
     );
   }
   return (
@@ -728,7 +730,7 @@ export default function WorkspaceViews({
                 setEditCourt({
                   id: '',
                   name: '',
-                  location: 'Clube de Padel',
+                  location: 'Premier Padel Club',
                   active: true,
                 });
               }}
@@ -904,7 +906,7 @@ export default function WorkspaceViews({
               <section className="panel message-preview">
                 <MessageCircle size={22} />
                 <div>
-                  <h2>Mensagem para o grupo Escada</h2>
+                  <h2>Mensagem para o grupo Ultimate Challenge</h2>
                   <p>
                     Uma mensagem com os jogos de M1+, M1 e M2. O envio ainda não
                     está ligado.
@@ -985,7 +987,7 @@ export default function WorkspaceViews({
           </section>
           <section className="panel group-card">
             <Badge tone="neutral">M1+ · M1 · M2</Badge>
-            <h2>Grupo Escada</h2>
+            <h2>Grupo Ultimate Challenge</h2>
             <p>Um único grupo para todos os jogadores · por associar</p>
             <div className="info-note compact">
               <LinkIcon size={16} /> Convite disponível após configuração
@@ -1023,6 +1025,7 @@ export default function WorkspaceViews({
       )}
       {view === 'Histórico' && (
         <>
+          {live ? <CompetitionLive history /> : <>
           <section className="panel">
             <div className="section-heading">
               <h2>Histórico mensal</h2>
@@ -1033,6 +1036,7 @@ export default function WorkspaceViews({
               description="Os três vencedores e a classificação final ficam guardados aqui após o fecho mensal."
             />
           </section>
+          </>}
           <section className="panel audit-panel">
             <h2>Atividade nesta sessão</h2>
             {audit.length ? (
@@ -1052,6 +1056,7 @@ export default function WorkspaceViews({
       )}
       {view === 'Configurações' && (
         <>
+          {live && <OpenAISettings />}
           <section className="panel">
             <div className="section-heading">
               <h2>Regulamento definido</h2>
@@ -1071,6 +1076,9 @@ export default function WorkspaceViews({
                 ['Vencedores mensais', '1 por divisão · 3 no total'],
                 ['Desempate', 'Vence o jogador mais velho'],
                 ['M1+', 'Não sobe para outra divisão'],
+                ['M2', 'Não desce para outra divisão'],
+                ['Trocas', 'A cada 14 dias · 1 esquerda + 1 direita'],
+                ['Pontos nas trocas', 'Mantém os pontos acumulados'],
                 ['Pontos mensais', 'Começam a zero em cada mês'],
               ].map(([a, b]) => (
                 <div key={a}>
@@ -1080,15 +1088,7 @@ export default function WorkspaceViews({
               ))}
             </div>
           </section>
-          <section className="panel next-phase">
-            <h2>Por definir antes de automatizar</h2>
-            <p>
-              Quantidade de subidas e descidas, tratamento de pontos na mudança
-              de divisão, sequência entre meses e regras de faltas. As mudanças
-              de divisão e o fecho mensal não são executados automaticamente
-              nesta versão.
-            </p>
-          </section>
+          {live && <CompetitionLive />}
         </>
       )}
       <Dialog

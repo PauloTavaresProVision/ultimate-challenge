@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Escada · Gestão do torneio',
-  description: 'Backoffice do torneio de padel Escada.',
+  title: 'Ultimate Challenge · Gestão do torneio',
+  description: 'Backoffice do torneio de padel Ultimate Challenge.',
 };
 
 export default function RootLayout({

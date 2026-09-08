@@ -1,3 +1,4 @@
+import { installOpenAI } from './openai-settings.ts';
 import express from 'express';
 import { syncEnvironmentAdmin } from './admin-bootstrap.ts';
 import { installAdminState } from './admin-state.ts';
@@ -8,6 +9,8 @@ import { z } from 'zod';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { WhatsApp } from './whatsapp.ts';
+import { resultWinner } from './game-results.ts';
+import { runCompetition } from './competition.ts';
 import {
   randomToken,
   digest,
@@ -330,7 +333,23 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
   const group = await db.setting.findUnique({
     where: { key: 'whatsapp_group' },
   });
-  res.json({ status: wa.status, qr: wa.qr, groupId: group?.value ?? null });
+  const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
+  res.json({ status: wa.status, qr: wa.qr, groupId: group?.value ?? null,
+    groupName: groupName?.value ?? null, account: wa.account,
+    connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
+});
+app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
+  const { phone, message } = z.object({
+    phone: z.string().regex(/^\+[1-9]\d{7,14}$/),
+    message: z.string().trim().min(1).max(1000),
+  }).parse(req.body);
+  await limited('whatsapp:test', 5, 60);
+  if (wa.status !== 'connected') fail(409, 'Liga o WhatsApp antes de enviar o teste.');
+  try {
+    res.json(await wa.sendTest(phone, message));
+  } catch {
+    fail(502, 'Não foi possível confirmar o envio. Verifica a receção no telemóvel antes de repetir.');
+  }
 });
 app.post('/api/admin/whatsapp/connect', auth, admin, async (_req, res) => {
   await wa.connect();
@@ -358,11 +377,28 @@ app.get('/api/admin/messages', auth, admin, async (_req, res) => {
         attempts: true,
         createdAt: true,
         sentAt: true,
+        nextAttemptAt: true,
+        expiresAt: true,
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
   );
+});
+app.get('/api/admin/message-delivery', auth, admin, async (_req,res) => {
+  const row=await db.setting.findUnique({where:{key:'message_delivery'}});
+  res.json(row?JSON.parse(row.value):{mode:'immediate',hoursBefore:24});
+});
+app.put('/api/admin/message-delivery', auth, admin, async (req,res) => {
+  const setting=z.object({mode:z.enum(['immediate','scheduled']),hoursBefore:z.number().int().min(1).max(168)}).parse(req.body);
+  await db.setting.upsert({where:{key:'message_delivery'},create:{key:'message_delivery',value:JSON.stringify(setting)},update:{value:JSON.stringify(setting)}});
+  res.json(setting);
+});
+app.post('/api/admin/messages/:id/cancel', auth, admin, async (req,res) => {
+  const id=z.string().min(1).max(100).parse(req.params.id);
+  const cancelled=await db.outbox.updateMany({where:{id,kind:'round',status:'pending'},data:{status:'cancelled',encryptedBody:''}});
+  if(!cancelled.count) fail(409,'Esta mensagem já não pode ser cancelada. Atualiza o estado.');
+  res.json({ok:true});
 });
 app.get('/api/games', auth, async (_req, res) => {
   const s = res.locals.session;
@@ -370,12 +406,32 @@ app.get('/api/games', auth, async (_req, res) => {
     fail(403, 'A inscrição ainda não foi aprovada.');
   const games = await db.game.findMany({
     where: { published: true },
-    include: { court: { select: { name: true } } },
+    include: { court: { select: { name: true, location: true } } },
+    orderBy: [{ date: 'desc' }, { time: 'asc' }],
   });
   const people = await db.player.findMany({
     select: { id: true, name: true, side: true },
   });
   res.json({ playerId: s.playerId, people, games });
+});
+app.post('/api/games/:id/result', auth, async (req, res) => {
+  const s = res.locals.session;
+  if (!s.player?.verified || s.player.status !== 'Ativo') fail(403, 'A inscrição ainda não foi aprovada.');
+  const { outcome } = z.object({ outcome: z.enum(['win', 'loss']) }).parse(req.body);
+  const id = z.string().min(1).max(100).parse(req.params.id);
+  const winner = await db.$transaction(async tx => {
+    // Use the same lock as the backoffice: an old admin snapshot must never overwrite a player's result.
+    await tx.revision.update({ where: { id: 1 }, data: { value: { increment: 1 } } });
+    const player = await tx.player.findUnique({ where: { id: s.playerId } });
+    if (!player?.verified || player.status !== 'Ativo') fail(403, 'A inscrição não está ativa.');
+    const game = await tx.game.findUnique({ where: { id } });
+    if (game && await tx.setting.findUnique({where:{key:'competition:month:'+game.date.slice(0,7)}})) fail(409, 'O mês deste jogo já foi encerrado.');
+    const winner = resultWinner(game, s.playerId, outcome, new Date().toISOString().slice(0, 10));
+    await tx.game.update({ where: { id }, data: { winner } });
+    await tx.audit.create({ data: { actor: s.playerId, action: `${player.name} registou ${outcome === 'win' ? 'vitória' : 'derrota'} no jogo ${id} (${game!.date}, ${game!.division}).` } });
+    return winner;
+  });
+  res.json({ ok: true, winner });
 });
 const dummyPasswordHash = hashPassword(randomToken());
 await syncEnvironmentAdmin();
@@ -385,6 +441,11 @@ await db.outbox.updateMany({
   data: { status: 'uncertain' },
 });
 installAdminState(app, auth, admin, wa, snapshot);
+installOpenAI(app, auth, admin);
+app.get('/api/admin/competition', auth, admin, async (_req,res) => {
+  const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
+  res.json({months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});
+});
 app.use(express.static(resolve('web')));
 app.get('/{*path}', (_req, res) => res.sendFile(resolve('web/index.html')));
 app.use(
@@ -413,6 +474,10 @@ app.use(
 const timer = setInterval(() => {
   void wa.deliver().catch(() => {});
 }, 2000);
+let competitionRunning=false;
+const tickCompetition=async()=>{if(competitionRunning)return;competitionRunning=true;try{await runCompetition();}catch{console.error('Não foi possível processar o calendário da competição.');}finally{competitionRunning=false;}};
+const competitionTimer=setInterval(()=>void tickCompetition(),60000);
+void tickCompetition();
 const cleanup = setInterval(() => {
   void db.outbox
     .updateMany({
@@ -431,6 +496,7 @@ if (config.WA_AUTO_CONNECT === 'true') await wa.connect();
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => {
     clearInterval(timer);
+    clearInterval(competitionTimer);
     clearInterval(cleanup);
     void wa
       .disconnect()

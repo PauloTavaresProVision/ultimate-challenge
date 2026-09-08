@@ -81,6 +81,7 @@ import {
 type Props = {
   saving?: boolean;
   onSavePlayers?: (players: Player[], audit: string[]) => Promise<void>;
+  onSaveChanges?: (changes: {courts?:Court[];games?:Game[];audit:string[]}) => Promise<void>;
   live?: boolean;
   audit: string[];
   setAudit: Dispatch<SetStateAction<string[]>>;
@@ -162,6 +163,7 @@ export default function WorkspaceViews({
   setAudit,
   saving,
   onSavePlayers,
+  onSaveChanges,
   view,
   division,
   players,
@@ -197,12 +199,20 @@ export default function WorkspaceViews({
   const inform = (text: string) => {
     setNotice(
       live
-        ? 'Alterações locais preparadas. Usa Guardar alterações para confirmar na base de dados.'
+        ? text
         : text,
     );
     setError('');
   };
   const log = (text: string) => setAudit((a) => [text, ...a]);
+  async function persist(changes:{courts?:Court[];games?:Game[]},entry:string) {
+    if(saving)return false;
+    try {
+      if(live && onSaveChanges) await onSaveChanges({...changes,audit:[entry,...audit]});
+      else {if(changes.courts)setCourts(changes.courts);if(changes.games)setGames(changes.games);log(entry);}
+      setError('');return true;
+    } catch(e){setError((e as Error).message);setNotice('');return false;}
+  }
   const active = players.filter((p) => p.status === 'Ativo');
   const filtered = players.filter(
     (p) =>
@@ -295,8 +305,8 @@ export default function WorkspaceViews({
         : 'Dados atualizados nesta sessão.',
     );
   }
-  function saveCourt() {
-    if (!editCourt) return;
+  async function saveCourt() {
+    if (saving || !editCourt) return;
     if (!editCourt.name.trim() || !editCourt.location.trim()) {
       setError('Indica o nome e o local do campo.');
       return;
@@ -325,16 +335,11 @@ export default function WorkspaceViews({
       id: editCourt.id || crypto.randomUUID(),
       name: editCourt.name.trim(),
     };
-    setCourts((list) =>
-      list.some((x) => x.id === c.id)
-        ? list.map((x) => (x.id === c.id ? c : x))
-        : [...list, c],
-    );
+    if(!await persist({courts:courts.some(x=>x.id===c.id)?courts.map(x=>x.id===c.id?c:x):[...courts,c]},`Campo ${c.name} atualizado.`))return;
     setEditCourt(null);
-    inform('Campo guardado nesta sessão.');
-    log(`Campo ${c.name} atualizado.`);
+    inform('Campo guardado.');
   }
-  function generate() {
+  async function generate() {
     try {
       const available = courts.filter((c) => c.active);
       if (!available.length)
@@ -372,18 +377,17 @@ export default function WorkspaceViews({
         );
       const encounters = generated.map(g=>[...g.a,...g.b].sort().join('|'));
       const repeated = encounters.length - new Set(encounters).size;
-      setGames([...prior, ...generated]);
+      if(!await persist({games:[...prior,...generated]},`Ronda ${nextRound} sorteada.`))return;
       inform(
         `Ronda ${nextRound} sorteada: ${generated.length} jogos de 20 minutos, dupla fixa. ${repeated ? repeated + " confrontos repetidos por limitação de duplas/campos." : "Sem repetir adversários."}`,
       );
-      log(`Ronda ${nextRound} sorteada.`);
     } catch (e) {
       setError((e as Error).message);
       setNotice('');
     }
   }
-  function saveGame() {
-    if (!editGame) return;
+  async function saveGame() {
+    if (saving || !editGame) return;
     if (
       !editGame.date.startsWith(month) ||
       !editGame.time ||
@@ -417,10 +421,7 @@ export default function WorkspaceViews({
       setError('Indica o motivo da correção do resultado.');
       return;
     }
-    setGames((list) => list.map((g) => (g.id === editGame.id ? editGame : g)));
-    log(
-      `Jogo ${editGame.id.slice(0, 6)} atualizado${reason ? `: ${reason}` : '.'}`,
-    );
+    if(!await persist({games:games.map(g=>g.id===editGame.id?editGame:g)},`Jogo ${editGame.id.slice(0,6)} atualizado${reason?`: ${reason}`:'.'}`))return;
     setEditGame(null);
     inform('Jogo atualizado. A classificação foi recalculada.');
   }
@@ -826,7 +827,7 @@ export default function WorkspaceViews({
                 <MapPin size={18} />
                 {courts.filter((c) => c.active).length} campos
               </div>
-              <Button onClick={generate}>
+              <Button disabled={saving} onClick={generate}>
                 <Shuffle size={17} />
                 {roundGames.length ? 'Refazer sorteio' : 'Gerar sorteio'}
               </Button>
@@ -871,21 +872,13 @@ export default function WorkspaceViews({
                 </div>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setGames((list) =>
-                      list.map((g) =>
-                        g.round === nextRound ? { ...g, published: true } : g,
-                      ),
-                    );
-                    log(`Ronda ${nextRound} finalizada na demonstração.`);
-                    inform(
-                      'Ronda finalizada nesta sessão. Nenhuma mensagem foi enviada ao WhatsApp.',
-                    );
-                  }}
+                  disabled={saving || roundGames.every(g=>g.published)}
+                  onClick={async () => {
+                    if(await persist({games:games.map(g=>g.round===nextRound?{...g,published:true}:g)},`Ronda ${nextRound} publicada.`)) inform('Ronda publicada. O envio ao grupo segue o agendamento configurado.');                  }}
                 >
                   <Check size={16} />{' '}
                   {live
-                    ? 'Preparar publicação no grupo'
+                    ? 'Publicar no grupo'
                     : 'Finalizar demonstração'}
                 </Button>
               </div>
@@ -1118,7 +1111,7 @@ export default function WorkspaceViews({
             </DialogTitle>
             <DialogDescription>
               {live
-                ? 'Dados do jogador. As alterações entram em vigor após guardar no backoffice.'
+                ? 'Confirma nesta janela para guardar os dados do jogador.'
                 : 'Dados de demonstração. Nenhum contacto será efetuado.'}
             </DialogDescription>
           </DialogHeader>
@@ -1305,7 +1298,7 @@ export default function WorkspaceViews({
                 </p>
               )}
               <div className="dialog-actions">
-                <Button type="submit">Guardar campo</Button>
+                <Button type="submit" disabled={saving}>{saving ? "A guardar…" : "Guardar campo"}</Button>
               </div>
             </form>
           )}
@@ -1435,7 +1428,7 @@ export default function WorkspaceViews({
                 </p>
               )}
               <div className="dialog-actions">
-                <Button type="submit">Guardar jogo</Button>
+                <Button type="submit" disabled={saving}>{saving ? "A guardar…" : "Guardar jogo"}</Button>
               </div>
             </form>
           )}

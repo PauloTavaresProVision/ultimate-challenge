@@ -1,5 +1,5 @@
 'use client';
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -147,12 +147,15 @@ export default function Backoffice({
   const [courts, setCourts] = useState(liveState?.courts ?? initialCourts);
   const [revision, setRevision] = useState(liveState?.revision ?? 0);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
   const [saveNote, setSaveNote] = useState('');
-  async function save(nextPlayers?: Player[], nextAudit?: string[]) {
+  async function save(nextPlayers?: Player[], nextAudit?: string[], changes?: Partial<LiveState>) {
     if (!onSave) return;
+    if (saveLock.current) throw new Error('Aguarda a conclusão da ação anterior.');
+    saveLock.current = true;
     setSaving(true);
     try {
-      const saved = await onSave({ players: nextPlayers ?? players, courts, games, audit: nextAudit ?? audit, revision });
+      const saved = await onSave({ players: nextPlayers ?? players, courts, games, audit: nextAudit ?? audit, revision, ...changes });
       setPlayers(saved.players);
       setCourts(saved.courts);
       setGames(saved.games);
@@ -161,8 +164,9 @@ export default function Backoffice({
       setSaveNote('Alterações guardadas na base de dados.');
     } catch (e) {
       setSaveNote((e as Error).message);
-      if (nextPlayers) throw e;
+      throw e;
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   }
@@ -214,7 +218,7 @@ export default function Backoffice({
             </span>
             <span>
               {liveState
-                ? 'Guarda as alterações antes de sair.'
+                ? 'Cada ação é guardada ao confirmar.'
                 : 'Dados fictícios · alterações válidas durante esta sessão'}
             </span>
           </div>
@@ -228,18 +232,7 @@ export default function Backoffice({
                   : 'Gere o teu torneio Ultimate Challenge.'}
               </p>
             </div>
-            <div className="heading-actions">
-              {liveState && (
-                <Button
-                  variant="outline"
-                  className="primary-action"
-                  disabled={saving}
-                  onClick={() => void save()}
-                >
-                  {saving ? 'A guardar…' : 'Guardar alterações'}
-                </Button>
-              )}
-            </div>
+
           </div>
           {saveNote && (
             <p role="status" className="feedback success">
@@ -521,6 +514,7 @@ export default function Backoffice({
             <WorkspaceViews
               saving={saving}
               onSavePlayers={onSave ? save : undefined}
+              onSaveChanges={onSave ? (changes) => save(undefined, undefined, changes) : undefined}
               live={!!liveState}
               audit={audit}
               setAudit={setAudit}

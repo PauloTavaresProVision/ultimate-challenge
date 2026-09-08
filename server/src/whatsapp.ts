@@ -1,3 +1,4 @@
+import { handleAI, botEnabled } from './ai-bot.ts';
 import { handleParticipation, participationIntent } from './substitutions.ts';
 import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
@@ -163,7 +164,7 @@ export class WhatsApp {
             message.message?.conversation ??
             message.message?.extendedTextMessage?.text ??
             '';
-          if (!/^\/escada(?:\s|$)/i.test(text) && !participationIntent(text)) continue;
+          if (!text.trim() || text.length > 1500) continue;
           const id = message.key.id;
           if (!id || this.seen.has(id)) continue;
           this.seen.set(id, Date.now());
@@ -174,6 +175,16 @@ export class WhatsApp {
           if(participationIntent(text)) {
             const phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
             if(phone)void handleParticipation(message.key.remoteJid??'',phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined).catch(()=>console.error('Não foi possível processar a participação.'));
+            continue;
+          }
+          if(!/^\/escada(?:\s|$)/i.test(text)) {
+            void (async()=>{
+              const group=message.key.remoteJid??'';
+              if(!await botEnabled()||(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+              let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
+              if(!phone){const metadata=await sock.groupMetadata(group);const member=metadata.participants.find(p=>p.id===message.key.participant);phone=phoneFromJid(member?.phoneNumber);}
+              if(phone)await handleAI(group,phone,text,id);
+            })().catch(()=>console.error('Não foi possível processar a pergunta do grupo.'));
             continue;
           }
           void this.onCommand(
@@ -295,6 +306,7 @@ export class WhatsApp {
       });
       if (!claim.count) return;
       try {
+        if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }

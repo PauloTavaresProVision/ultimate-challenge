@@ -2,6 +2,7 @@
 import { weeklySchedule } from '@/lib/tournament';
 import Substitutions from './substitutions';
 import RulesEditor from './rules-editor';
+import AIBotSettings from './ai-bot-settings';
 import OpenAISettings from './openai-settings';
 import CompetitionLive from './competition-live';
 import {
@@ -1049,6 +1050,7 @@ export default function WorkspaceViews({
           {live && settingsTab==='rules' && <RulesEditor />}
           <div hidden={live && settingsTab!=='general'}>
           {live && <OpenAISettings />}
+          {live && <AIBotSettings />}
           <section className="panel">
             <div className="section-heading">
               <h2>Regulamento definido</h2>

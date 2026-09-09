@@ -39,6 +39,7 @@ export default function WhatsAppLive() {
   const [testResult, setTestResult] = useState('');
   const [testError, setTestError] = useState('');
   const connected = state.status === 'connected';
+  const engineLabel = state.engine === 'webjs' ? 'WhatsApp Web' : state.engine === 'baileys' ? 'Baileys' : 'A verificar';
   const statusLabel = ({ loading: 'A verificar', connected: 'Ligado', connecting: 'A ligar', qr: 'Aguardar leitura do QR', disconnected: 'Desligado', logged_out: 'Sessão terminada', error: 'Erro de ligação' } as Record<string, string>)[state.status] ?? state.status;
   async function refresh() { setState(await api<Connection>('/admin/whatsapp')); }
   useEffect(() => {
@@ -82,7 +83,7 @@ export default function WhatsAppLive() {
       <div className="wa-connection-actions"><span className={`wa-status ${connected ? 'is-connected' : ''}`}><span />{statusLabel}</span>
         {['connected','connecting','qr'].includes(state.status) ? <Button variant="outline" disabled={!!busy} onClick={() => action('/admin/whatsapp/disconnect')}><Unplug size={15} /> Desligar</Button> : <Button disabled={!!busy || ['loading', 'connecting', 'qr'].includes(state.status)} onClick={() => action('/admin/whatsapp/connect')}><QrCode size={16} /> Ligar por QR</Button>}
       </div>
-      <div className="wa-connection-meta"><span><Smartphone size={14} /> Ligação por Baileys</span><span>{connected && state.connectedAt ? `Ligado desde ${new Date(state.connectedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : 'Estado atualizado automaticamente'}</span></div>
+      <div className="wa-connection-meta"><span><Smartphone size={14} /> {connected ? 'Ligado por' : 'Método selecionado:'} {engineLabel}</span><span>{connected && state.connectedAt ? `Ligado desde ${new Date(state.connectedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : 'Estado atualizado automaticamente'}</span></div>
       {state.qr && <div className="wa-qr"><img src={state.qr} alt="QR para associar o WhatsApp" width={220} height={220} /><div><h3>Associa o teu telemóvel</h3><p>No WhatsApp, abre <strong>Dispositivos associados</strong> e escolhe <strong>Associar dispositivo</strong>. Depois lê este código.</p></div></div>}
     </section>
     <div className="wa-grid">

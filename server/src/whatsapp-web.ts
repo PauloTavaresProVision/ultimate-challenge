@@ -10,7 +10,7 @@ export const fromWebId=(id:string)=>id.replace(/@c\.us$/,'@s.whatsapp.net');
 export const webReceipt=(ack:number)=>({[-1]:0,1:2,2:3,3:4,4:5} as Record<number,number>)[ack];
 
 export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;executablePath?:string;
-  qr:(qr:string)=>void;ready:()=>void;closed:(revoked:boolean)=>void;
+  qr:(qr:string)=>void;authenticated?:()=>void;ready:()=>void;closed:(revoked:boolean)=>void;
   message:(message:WAMessage)=>void;receipt:(id:string,status:number)=>void;joined:(group:string,ids:string[])=>void;
 }, createClient:(options:ClientOptions)=>WebClient=options=>new WWebJS.Client(options)):Promise<MessagingSocket> {
   const lease=new PgClient({connectionString:options.databaseUrl,connectionTimeoutMillis:10000,keepAlive:true});
@@ -65,7 +65,8 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     }
   };
   client.on('qr',value=>{if(!stopped)options.qr(value);});
-  client.on('ready',()=>{if(!stopped){ready=true;options.ready();}});
+  client.on('authenticated',()=>{if(!stopped){console.info('WhatsApp Web: associado; a concluir inicialização.');options.authenticated?.();}});
+  client.on('ready',()=>{if(!stopped){ready=true;console.info('WhatsApp Web: pronto para enviar.');options.ready();}});
   client.on('auth_failure',()=>reportClose(true));
   client.on('disconnected',reason=>{
     if(stopped)return;

@@ -74,6 +74,7 @@ export class WhatsApp {
   status:
     | 'disconnected'
     | 'connecting'
+    | 'syncing'
     | 'qr'
     | 'connected'
     | 'logged_out'
@@ -353,11 +354,13 @@ export class WhatsApp {
   private async openWeb(){
     if(!this.enabled)return;
     const generation=++this.generation;
+    let qrRevision=0;
     this.status='connecting';this.lastError=null;
     try {
       const sock=await this.webFactory({databaseUrl:config.DATABASE_URL,folder:config.WA_WEB_AUTH_DIR,executablePath:config.WA_WEB_EXECUTABLE,
-        qr:qr=>{void QRCode.toDataURL(qr).then(data=>{if(generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
-        ready:()=>{if(generation!==this.generation)return;this.status='connected';this.qr=null;this.lastError=null;this.failures=0;this.connectedAt=new Date().toISOString();void this.reconcileWelcomes().catch(()=>{});},
+        qr:qr=>{const revision=++qrRevision;void QRCode.toDataURL(qr).then(data=>{if(revision===qrRevision&&generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
+        authenticated:()=>{if(generation!==this.generation)return;qrRevision++;this.qr=null;this.status='syncing';},
+        ready:()=>{if(generation!==this.generation)return;qrRevision++;this.status='connected';this.qr=null;this.lastError=null;this.failures=0;this.connectedAt=new Date().toISOString();void this.reconcileWelcomes().catch(()=>{});},
         closed:revoked=>{if(generation!==this.generation)return;
           const closed=++this.generation;const previous=this.socket;this.socket=null;this.qr=null;
           this.status=revoked?'logged_out':'disconnected';

@@ -22,9 +22,12 @@ try{
  import {WhatsApp} from './src/whatsapp.ts';import {encrypt} from './src/security.ts';import {config} from './src/config.ts';
  let sends=0;
  const socket={end:async()=>{},signalRepository:{lidMapping:{getLIDForPN:async()=>null}},sendMessage:async()=>{sends++;return {key:{id:'fake-'+sends}};}};
- const wa=new WhatsApp(async()=>socket);
+ let events;
+ const wa=new WhatsApp(async options=>{events=options;return socket;});
  try {
- await wa.selectEngine('webjs');await wa.connect();wa.status='connected';
+ await wa.selectEngine('webjs');await wa.connect();
+ events.qr('test-qr');events.authenticated();await new Promise(r=>setTimeout(r,100));
+ assert.equal(wa.qr,null);assert.equal(wa.status,'syncing');events.ready();assert.equal(wa.status,'connected');
  assert.equal(await automaticPaused(),false);
  for(const kind of ['invitation','otp','welcome','ai','group_join'])await db.outbox.create({data:{recipient:'244900000001@s.whatsapp.net',kind,encryptedBody:encrypt('Test',config.MESSAGE_KEY),expiresAt:new Date(Date.now()+600000)}});
  await setAutomaticPaused(true);assert.equal(await automaticPaused(),true);

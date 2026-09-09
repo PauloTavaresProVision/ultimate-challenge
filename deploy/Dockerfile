@@ -29,4 +29,4 @@ COPY --from=build --chown=node:node /app/lib /app/lib
 RUN mkdir -p /app/server/.session && chown node:node /app/server/.session
 USER node
 EXPOSE 3100
-CMD ["sh", "-c", "npm run db:migrate && npm start"]
+CMD ["sh", "-c", "npm run db:migrate && exec node --import tsx src/index.ts"]

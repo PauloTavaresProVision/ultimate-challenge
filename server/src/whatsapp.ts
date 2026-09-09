@@ -1,3 +1,4 @@
+import {loadWhatsAppAuth} from './whatsapp-auth.ts';
 import {claimDelivery,finishInvitation} from './delivery-queue.ts';
 import { handleAI, botEnabled } from './ai-bot.ts';
 import { SendGate } from './whatsapp-send-gate.ts';
@@ -10,8 +11,6 @@ import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
 import { joinApprovedPlayer } from './group-join.ts';
 import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
   jidNormalizedUser,
   type WASocket,
 } from '@whiskeysockets/baileys';
@@ -34,6 +33,9 @@ export class WhatsApp {
   private socket: WASocket | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private enabled = false;
+  private stopping = false;
+  private auth: Awaited<ReturnType<typeof loadWhatsAppAuth>> | null = null;
+  private opening: Promise<void> | null = null;
   private generation = 0;
   private failures = 0;
   private sending = false;
@@ -110,13 +112,27 @@ export class WhatsApp {
     }
   }
   async connect() {
-    if (this.enabled) return;
-    await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
-    const files = await readdir(config.WA_AUTH_DIR);
-    if (this.status === 'logged_out' || files.includes('.requires-qr')) await this.archiveSession();
+    if (this.enabled || this.stopping) return;
     this.enabled = true;
-    this.failures = 0;
-    await this.open();
+    const generation=this.generation;
+    try {
+      await mkdir(config.WA_AUTH_DIR,{recursive:true,mode:0o700});
+      const files=await readdir(config.WA_AUTH_DIR);
+      if(!this.enabled||generation!==this.generation)return;
+      if(this.status==='logged_out'||files.includes('.requires-qr'))await this.archiveSession();
+      if(!this.enabled||generation!==this.generation)return;
+      this.failures=0;
+      await this.open();
+    } catch {
+      if(!this.enabled||generation!==this.generation)return;
+      this.enabled=false;this.status='error';
+      this.lastError='Não foi possível preparar a sessão. Os ficheiros foram preservados.';
+    }
+  }
+  private open():Promise<void> {
+    if(this.opening)return this.opening;
+    this.opening=this.openSocket().finally(()=>{this.opening=null;});
+    return this.opening;
   }
   private async archiveSession() {
     await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
@@ -127,15 +143,18 @@ export class WhatsApp {
     await mkdir(backup, { recursive: true, mode: 0o700 });
     for (const file of files) await rename(join(config.WA_AUTH_DIR, file.name), join(backup, file.name));
   }
-  private async open() {
+  private async openSocket() {
+    if(!this.enabled)return;
     const generation = ++this.generation;
     this.status = 'connecting';
     try {
       await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
-      const { state, saveCreds } = await useMultiFileAuthState(
+      const auth = await loadWhatsAppAuth(
         config.WA_AUTH_DIR,
       );
-      if (!this.enabled || generation !== this.generation) return;
+      if (!this.enabled || generation !== this.generation) { await auth.close(); return; }
+      this.auth = auth;
+      const {state, saveCreds} = auth;
       const sock = makeWASocket({
         auth: state,
         logger,
@@ -167,12 +186,14 @@ export class WhatsApp {
       sock.ev.on('creds.update', () => {
         if (generation !== this.generation) return;
         void saveCreds().catch(() => {
+          if(generation!==this.generation)return;
+          this.enabled=false;this.generation++;this.socket=null;sock.end(undefined);
           this.status = 'error';
           this.lastError = 'Não foi possível guardar a sessão WhatsApp. Verifica as permissões e o espaço em disco.';
           console.error('WhatsApp: falha ao guardar credenciais.');
         });
       });
-      sock.ev.on('connection.update', async (update) => {
+      sock.ev.on('connection.update', (update) => { void (async()=>{
         if (generation !== this.generation) return;
         if (update.qr) {
           const qr = await QRCode.toDataURL(update.qr);
@@ -192,6 +213,19 @@ export class WhatsApp {
         if (update.connection === 'close') {
           this.qr = null;
           this.socket = null;
+          const closedGeneration = ++this.generation;
+          if (this.timer) clearTimeout(this.timer);
+          this.timer = null;
+          sock.end(undefined);
+          try { await auth.close(); } catch {
+            if (closedGeneration !== this.generation) return;
+            this.enabled = false;
+            this.status = 'error';
+            this.lastError = 'Falha ao guardar a sessão. Os ficheiros foram preservados.';
+            return;
+          }
+          if (closedGeneration !== this.generation) return;
+          this.auth = null;
           const code = (
             update.lastDisconnect?.error as { output?: { statusCode?: number } }
           )?.output?.statusCode;
@@ -199,7 +233,6 @@ export class WhatsApp {
           this.lastError = policy.message;
           console.warn('WhatsApp desligado:', code ?? 'sem código', policy.message);
           if (policy.stop) {
-            this.generation++;
             if (policy.invalidate) await writeFile(join(config.WA_AUTH_DIR, '.requires-qr'), 'Session rejected; pair again.', {mode:0o600}).catch(()=>{});
             this.status = policy.invalidate ? 'logged_out' : 'error';
             this.enabled = false;
@@ -208,7 +241,7 @@ export class WhatsApp {
           this.status = 'disconnected';
           if (this.enabled && this.failures++ < 8)
             this.timer = setTimeout(
-              () => void this.open(),
+              () => {this.timer=null;if(this.enabled&&closedGeneration===this.generation)void this.open();},
               Math.min(60000, 2000 * 2 ** this.failures),
             );
           else {
@@ -216,7 +249,7 @@ export class WhatsApp {
             this.status = 'error';
           }
         }
-      });
+      })().catch(()=>{console.error('WhatsApp: falha ao processar estado da ligação.');}); });
       sock.ev.on('group-participants.update', event => {
         if(generation !== this.generation || event.action !== 'add')return;
         void (async()=>{
@@ -232,7 +265,7 @@ export class WhatsApp {
         })().catch(()=>console.error('Não foi possível preparar as boas-vindas.'));
       });
       sock.ev.on('messages.upsert', ({ messages, type }) => {
-        if (type !== 'notify') return;
+        if (generation !== this.generation || !this.enabled || type !== 'notify') return;
         for (const message of messages) {
           if (message.key.fromMe) continue;
           const text =
@@ -270,6 +303,10 @@ export class WhatsApp {
         }
       });
     } catch {
+      if (generation !== this.generation) return;
+      this.socket?.end(undefined);
+      await this.auth?.close().catch(()=>{});
+      this.auth = null;
       this.lastError = 'Não foi possível iniciar a ligação. A sessão guardada foi preservada.';
       this.status = 'error';
       this.enabled = false;
@@ -277,6 +314,7 @@ export class WhatsApp {
     }
   }
   async disconnect() {
+    this.stopping = true;
     this.enabled = false;
     this.generation++;
     if (this.timer) clearTimeout(this.timer);
@@ -286,6 +324,11 @@ export class WhatsApp {
     this.qr = null;
     this.status = 'disconnected';
     sock?.end(undefined);
+    try {
+      await this.opening;
+      await this.auth?.close();
+      this.auth=null;
+    } finally { this.stopping=false; }
   }
   async groups() {
     if (!this.socket || this.status !== 'connected')

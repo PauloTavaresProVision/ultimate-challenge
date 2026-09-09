@@ -517,6 +517,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     clearInterval(cleanup);
     void wa
       .disconnect()
+      .catch(() => console.error('WhatsApp: falha ao concluir a gravação da sessão durante o encerramento.'))
       .finally(() =>
         server.close(
           () => void db.$disconnect().finally(() => process.exit(0)),

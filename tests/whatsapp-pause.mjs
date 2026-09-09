@@ -39,6 +39,10 @@ try{
  assert.equal(sends,2,'Concurrent requests for one test must send only once');
  await wa.startTest(testId,'+244900000001','Tracked test');assert.equal(sends,2);
  assert.equal((await db.outbox.findUnique({where:{id:testId}})).status,'sent');
+ let queries=0;socket.fetchReceipt=async()=>{queries++;return 4;};
+ await wa.refreshReceipt('fake-2');await wa.refreshReceipt('fake-2');
+ await new Promise(r=>setTimeout(r,100));
+ assert.equal(queries,1);assert.equal((await db.setting.findUnique({where:{key:'wa-receipt:fake-2'}})).value,'4');
  await wa.disconnect();const reloaded=new WhatsApp();await reloaded.initialize();assert.equal(await automaticPaused(),true);
  await setAutomaticPaused(false);assert(await claimDelivery());assert.equal(await db.outbox.count({where:{status:'pending'}}),4);
  console.log('PASS: pause persists, all automatic kinds remain queued, explicit test is allowed, resume claims pending work. No real WhatsApp messages sent.');

@@ -52,9 +52,10 @@ export default function WhatsAppLive() {
     let active=true;
     const poll=async()=>{
       try{
-        const result=await api<{status:string;recipient?:string}>(`/admin/whatsapp/test/${testId}`);
+        const result=await api<{status:string;recipient?:string;hasMessageId?:boolean}>(`/admin/whatsapp/test/${testId}`);
         if(!active)return;
         const labels:Record<string,string>={sending:'A enviar…',sent:'Enviado ao WhatsApp. A aguardar confirmação de entrega.',accepted:'Aceite pelo WhatsApp. A aguardar entrega.',delivered:'Entregue ao destinatário.',read:'Lido pelo destinatário.',failed:'O WhatsApp rejeitou o envio.',uncertain:'O envio ficou sem confirmação. Continuamos a consultar os recibos; não será repetido automaticamente.',not_found:'O servidor ainda não registou este teste. Podes tentar novamente: será usado o mesmo identificador.'};
+        if(result.status==='uncertain'&&!result.hasMessageId)labels.uncertain='O WhatsApp não devolveu o identificador da mensagem. Não conseguimos verificar a entrega deste teste; não foi reenviado.';
         setTestError('');setTestResult(`${result.recipient?'+'+result.recipient+' · ':''}${labels[result.status]??'A consultar envio…'}`);
       }catch{if(active)setTestError('Sem ligação ao servidor. A recuperar o estado deste envio automaticamente.');}
     };

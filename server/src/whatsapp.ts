@@ -23,7 +23,7 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import { config } from './config.ts';
 import { db } from './db.ts';
-import { decrypt, phoneFromJid } from './security.ts';
+import { decrypt, encrypt, phoneFromJid } from './security.ts';
 const logger = pino({ level: 'silent' });
 export class WhatsApp {
   constructor(private readonly webFactory:typeof openWebWhatsApp=openWebWhatsApp){}
@@ -82,6 +82,22 @@ export class WhatsApp {
   qr: string | null = null;
   lastError: string | null = null;
   private seen = new Map<string, number>();
+  private receiptChecks=new Map<string,number>();
+  private receiptInFlight=new Set<string>();
+  async refreshReceipt(id:string){
+    const socket=this.socket;
+    if(this.status!=='connected'||!socket?.fetchReceipt)return;
+    if(this.receiptInFlight.has(id))return;
+    if((this.receiptChecks.get(id)??0)>Date.now()-10000)return;
+    this.receiptChecks.set(id,Date.now());
+    this.receiptInFlight.add(id);
+    if(this.receiptChecks.size>500)this.receiptChecks.delete(this.receiptChecks.keys().next().value!);
+    // Do not keep the HTTP request open while Chromium is slow. A late receipt
+    // is still persisted and will appear on the following browser poll.
+    void socket.fetchReceipt(id).then(status=>{
+      if(socket===this.socket&&status!==null)return this.recordReceipt(id,status);
+    }).catch(()=>console.warn('WhatsApp: consulta de recibo indisponível.')).finally(()=>this.receiptInFlight.delete(id));
+  }
   private async recordReceipt(id: string, status: number, error?: string) {
     await db.$transaction(async tx => {
       const key = `wa-receipt:${id}`;
@@ -154,6 +170,8 @@ export class WhatsApp {
     } catch(e) {
       const code = (e as { output?: {statusCode?:number} })?.output?.statusCode;
       console.error('Falha no teste WhatsApp:', row.id, typeof code === 'number' ? code : 'sem código');
+      const detail=e instanceof Error?`${e.name}: ${e.message}\n${e.stack??''}`:String(e);
+      await db.setting.upsert({where:{key:'outbox-diagnostic:'+row.id},create:{key:'outbox-diagnostic:'+row.id,value:encrypt(detail,config.MESSAGE_KEY)},update:{value:encrypt(detail,config.MESSAGE_KEY)}});
       await db.outbox.update({where:{id:row.id},data:{status:'uncertain'}});
       throw e;
     }

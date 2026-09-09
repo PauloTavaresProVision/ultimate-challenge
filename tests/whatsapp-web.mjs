@@ -26,6 +26,9 @@ try{
  try {
  socket=await openWebWhatsApp(options,opts=>{assert.equal(opts.takeoverOnConflict,false);assert.equal(opts.webVersionCache.path,'/tmp/web-profile/web-cache');return fake;});
  await new Promise(r=>setImmediate(r));assert.equal(ready,1);
+ fake.getMessageById=async id=>id==='cached-message'?{ack:3}:null;
+ assert.equal(await socket.fetchReceipt('cached-message'),4);
+ assert.equal(await socket.fetchReceipt('unknown-message'),null);
  fake.pupPage={evaluate:async fn=>{
   const previous=globalThis.require;
   globalThis.require=name=>{assert.equal(name,'WAWebCollections');return {Chat:{getModelsArray:()=>[

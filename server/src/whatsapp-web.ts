@@ -50,7 +50,10 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     get user(){const info=client.info;return info?{id:fromWebId(info.wid._serialized),name:info.pushname}:undefined;},
     signalRepository:{lidMapping:{getLIDForPN:async()=>null,getPNForLID:pn}},
     async sendMessage(id,content){check();const result=await client.sendMessage(toWebId(id),content.text,
-      {mentions:content.mentions?.map(toWebId),sendSeen:false});return result?{key:{id:result.id._serialized}}:undefined;},
+      {mentions:content.mentions?.map(toWebId),sendSeen:false});
+      if(result){const status=webReceipt(result.ack);if(status!==undefined)options.receipt(result.id._serialized,status);}
+      return result?{key:{id:result.id._serialized}}:undefined;},
+    async fetchReceipt(id){check();const message=await client.getMessageById(id);return message?webReceipt(message.ack)??null:null;},
     async groupMetadata(id){return metadata(await group(id));},
     async groupFetchAllParticipating(){
       check();

@@ -374,11 +374,13 @@ app.get('/api/admin/whatsapp/test/:id',auth,admin,async(req,res)=>{
   const row=await db.outbox.findUnique({where:{id}});
   if(!row||row.kind!=='test')return res.json({id,status:'not_found'});
   const mapping=await db.setting.findUnique({where:{key:'outbox-message:'+id}});
+  if(mapping)await wa.refreshReceipt(mapping.value);
   const receipt=mapping?await db.setting.findUnique({where:{key:'wa-receipt:'+mapping.value}}):null;
   const code=receipt?Number(receipt.value):null;
   const stored=row.status==='sending'&&Date.now()-row.createdAt.getTime()>120000?'uncertain':row.status;
   const status=code===0?'failed':code!==null&&code>=4?'read':code===3?'delivered':code===2?'accepted':stored;
-  res.json({id,status,sentAt:row.sentAt,recipient:row.recipient.split('@')[0]});
+  const diagnostic=await db.setting.findUnique({where:{key:'outbox-diagnostic:'+id}});
+  res.json({id,status,sentAt:row.sentAt,recipient:row.recipient.split('@')[0],hasMessageId:!!mapping,hasDiagnostic:!!diagnostic});
 });
 app.post('/api/admin/whatsapp/engine', auth, admin, async (req,res)=>{
   const {engine}=z.object({engine:z.enum(['baileys','webjs'])}).parse(req.body);

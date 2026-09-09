@@ -18,7 +18,13 @@ export async function api<T = any>(
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = (await r.json()) as T & { error?: string };
+  const raw=await r.text();
+  let data:T & {error?:string};
+  try{data=JSON.parse(raw);}catch{
+    throw new Error(method==='GET'
+      ? 'O servidor não devolveu uma resposta válida. Tenta atualizar o estado dentro de momentos.'
+      : 'Não foi possível confirmar a resposta do servidor. A operação pode ter sido concluída; verifica o estado antes de repetir.');
+  }
   if (!r.ok) throw new Error(data.error ?? 'Não foi possível concluir.');
   return data;
 }
@@ -113,7 +119,7 @@ export default function WhatsAppLive() {
         <header className="wa-card-heading"><div className="wa-icon"><Send size={19} /></div><div><h2>Testar envio</h2><p>Confirma a ligação com uma mensagem privada.</p></div></header>
         <form className="wa-test-form" onSubmit={async e => {
           e.preventDefault(); setBusy('test'); setTestError(''); setTestResult('');
-          try { const result = await api<{ sentAt: string }>('/admin/whatsapp/test', 'POST', { phone: phone.replace(/[\s()-]/g, ''), message }); setTestResult(`Enviada às ${new Date(result.sentAt).toLocaleTimeString('pt-PT')}. Confirma a receção no telemóvel do destinatário.`); }
+          try { const result = await api<{ sentAt?: string; pending?: boolean }>('/admin/whatsapp/test', 'POST', { phone: phone.replace(/[\s()-]/g, ''), message }); setTestResult(result.pending ? 'O teste continua a ser processado. Confirma a receção no WhatsApp ou consulta o histórico de mensagens antes de repetir.' : `Enviada às ${new Date(result.sentAt!).toLocaleTimeString('pt-PT')}. Confirma a receção no telemóvel do destinatário.`); }
           catch (err) { setTestError((err as Error).message); } finally { setBusy(''); }
         }}>
           <div className="wa-field"><div className="wa-label-row"><label htmlFor="wa-phone">Destinatário</label>{state.account?.phone && <button type="button" onClick={() => setPhone(state.account!.phone!)}>Usar número ligado</button>}</div><Input id="wa-phone" type="tel" autoComplete="tel" placeholder="+244 9XX XXX XXX" required pattern="[+][0-9 ()-]{8,20}" value={phone} onChange={e => setPhone(e.target.value)} /><small>Inclui o indicativo do país.</small></div>

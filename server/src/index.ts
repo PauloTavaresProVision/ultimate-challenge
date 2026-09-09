@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { WhatsApp } from './whatsapp.ts';
+import {testSendResponse} from './test-send-response.ts';
 import {automaticPaused,setAutomaticPaused} from './whatsapp-pause.ts';
 import { resultWinner } from './game-results.ts';
 import { runCompetition } from './competition.ts';
@@ -363,7 +364,8 @@ app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
   await limited('whatsapp:test', 5, 60);
   if (wa.status !== 'connected') fail(409, 'Liga o WhatsApp antes de enviar o teste.');
   try {
-    res.json(await wa.sendTest(phone, message));
+    const result=await testSendResponse(wa.sendTest(phone, message));
+    res.status('pending' in result?202:200).json(result);
   } catch {
     fail(wa.sendingPausedReason ? 409 : 502, wa.sendingPausedReason ?? 'Não foi possível confirmar o envio. Verifica o estado da mensagem antes de repetir.');
   }

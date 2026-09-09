@@ -12,7 +12,7 @@ try{
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','escada-app','300']);containerCreated=true;
  docker(['cp','server/src/ai-bot.ts',container+':/app/server/src/ai-bot.ts']);
  for(const p of ['bot-intent.ts','substitutions.ts','bot-message.ts','bot-roster.ts','tournament-assistant.ts','tournament-queries.ts','public-calendar.ts'])docker(['cp','server/src/'+p,container+':/app/server/src/'+p]);
- for(const p of ['public-rules.ts','tournament.ts'])docker(['cp','lib/'+p,container+':/app/lib/'+p]);
+ for(const p of ['public-rules.ts','tournament.ts','weekly-calendar.ts'])docker(['cp','lib/'+p,container+':/app/lib/'+p]);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],`
  import assert from 'node:assert/strict';import {queryTournament} from './src/tournament-queries.ts';import {db} from './src/db.ts';import {encrypt} from './src/security.ts';import {config} from './src/config.ts';import {todayLuanda} from './src/substitutions.ts';

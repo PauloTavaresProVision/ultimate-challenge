@@ -1,5 +1,5 @@
 'use client';
-import { weeklySchedule } from '@/lib/tournament';
+import {nextRoundCalendar,normalizeCalendar,scheduleDivisions,type WeeklyCalendar,type RoundCalendar} from '../lib/weekly-calendar';
 import Substitutions from './substitutions';
 import RulesEditor from './rules-editor';
 import CalendarSettings from './calendar-settings';
@@ -187,30 +187,17 @@ export default function WorkspaceViews({
   const [message, setMessage] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
   const [settingsTab,setSettingsTab]=useState('general');
-  const [roundTime,setRoundTime]=useState('18:00');
   const [calendarLoading,setCalendarLoading]=useState(!!live);
   const [calendarError,setCalendarError]=useState('');
   const month = live ? new Date().toISOString().slice(0, 7) : '2026-09';
-  const monthEnd = new Date(
-    Number(month.slice(0, 4)),
-    Number(month.slice(5)),
-    0,
-  ).getDate();
-  const [roundDate, setRoundDate] = useState(
-    live
-      ? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
-      : '2026-09-12',
-  );
-  useEffect(()=>{if(!live)return;let active=true;api<{weekday:number|null;time:string}>('/admin/calendar').then(c=>{
-    if(!active)return;setRoundTime(c.time);
-    if(c.weekday!==null){
-      const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
-      let date=new Date(today+'T12:00:00Z');
-      const last=games.map(g=>g.date).sort().at(-1);
-      if(last){const next=new Date(last+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+7);if(next>date)date=next;}
-      date.setUTCDate(date.getUTCDate()+((c.weekday-date.getUTCDay()+7)%7));setRoundDate(date.toISOString().slice(0,10));
-    }
-  }).catch(e=>{if(active)setCalendarError(e.message);}).finally(()=>{if(active)setCalendarLoading(false);});return()=>{active=false;};},[live]);
+  const monthEnd = new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate();
+  const [roundCalendar,setRoundCalendar]=useState<RoundCalendar>(()=>nextRoundCalendar(normalizeCalendar(),games,live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()):'2026-09-07'));
+  useEffect(()=>{if(!live)return;let active=true;setCalendarLoading(true);setCalendarError('');
+    api<WeeklyCalendar>('/admin/calendar').then(c=>{
+      if(active)setRoundCalendar(nextRoundCalendar(c,games,new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date())));
+    }).catch(e=>{if(active)setCalendarError(e.message);}).finally(()=>{if(active)setCalendarLoading(false);});
+    return()=>{active=false;};
+  },[live,view]);
   const [reason, setReason] = useState('');
   const inform = (text: string) => {
     setNotice(
@@ -360,34 +347,26 @@ export default function WorkspaceViews({
       const available = courts.filter((c) => c.active);
       if (!available.length)
         throw new Error('Adiciona pelo menos um campo ativo.');
-      if (!roundDate || !roundDate.startsWith(month))
-        throw new Error('Escolhe uma data no mês ativo.');
       if (games.some((g) => g.round !== nextRound && !g.winner))
         throw new Error(
           'Conclui os resultados da ronda anterior antes de preparar outra.',
         );
       const prior = games.filter((g) => g.round < nextRound);
-      const latest = prior
-        .map((g) => g.date)
-        .sort()
-        .at(-1);
-      if (
-        latest &&
-        (new Date(`${roundDate}T12:00:00`).getTime() -
-          new Date(`${latest}T12:00:00`).getTime()) /
-          86400000 <
-          7
-      )
-        throw new Error(
-          'A nova ronda deve ficar pelo menos uma semana depois da anterior.',
-        );
-      const pairs = draw(
+      for(const division of divisions){
+        if(!players.some(p=>p.status==='Ativo'&&p.verified&&p.division===division&&!excluded.includes(p.id)))continue;
+        const slot=roundCalendar[division];
+        if(!slot.date||!slot.time)throw new Error('Indica a data e a hora de '+division+'.');
+        const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
+        if(live&&slot.date<today)throw new Error('A data de '+division+' já passou.');
+        const latest=prior.filter(g=>g.division===division).map(g=>g.date).sort().at(-1);
+        if(latest&&(Date.parse(slot.date)-Date.parse(latest))/86400000<7)throw new Error('A divisão '+division+' deve jogar pelo menos uma semana depois da ronda anterior.');
+      }      const pairs = draw(
         players.filter((p) => !excluded.includes(p.id)),
         prior,
         nextRound,
       );
       if(calendarLoading||calendarError)throw new Error(calendarError||'A carregar o calendário.');
-      const generated = weeklySchedule(pairs, available, nextRound, roundDate, roundTime);
+      const generated = scheduleDivisions(pairs, available, nextRound, roundCalendar);
       if (generated.some((g) => conflict(g, [...prior, ...generated])))
         throw new Error(
           'Existe conflito de campo ou jogador no horário proposto.',
@@ -826,18 +805,8 @@ export default function WorkspaceViews({
               <Badge tone="neutral">Rascunho</Badge>
             </div>
             <div className="round-controls">
-              <Field label="Data dos jogos">
-                <Input
-                  type="date"
-                  value={roundDate}
-                  min={month + '-01'}
-                  max={month + '-' + monthEnd}
-                  onChange={(e) => setRoundDate(e.target.value)}
-                />
-              </Field>
-              <div className="round-summary">
-                <Field label="Hora de início (Angola)"><Input type="time" value={roundTime} disabled={saving||calendarLoading} onChange={e=>setRoundTime(e.target.value)}/></Field>
-                {calendarError&&<p role="alert" className="form-error">{calendarError}</p>}
+              <div className="division-calendar">{divisions.map(d=><div className="division-calendar-row" key={d}><strong>{d}</strong><label>Data dos jogos<Input type="date" value={roundCalendar[d].date} disabled={saving||calendarLoading} onChange={e=>setRoundCalendar({...roundCalendar,[d]:{...roundCalendar[d],date:e.target.value}})}/></label><label>Hora (Angola)<Input type="time" value={roundCalendar[d].time} disabled={saving||calendarLoading} onChange={e=>setRoundCalendar({...roundCalendar,[d]:{...roundCalendar[d],time:e.target.value}})}/></label></div>)}</div>
+              <div className="round-summary">                {calendarError&&<p role="alert" className="form-error">{calendarError}</p>}
                 <Users size={18} />
                 <strong>
                   {active.filter((p) => !excluded.includes(p.id)).length}
@@ -846,7 +815,7 @@ export default function WorkspaceViews({
                 <MapPin size={18} />
                 {courts.filter((c) => c.active).length} campos
               </div>
-              <Button disabled={saving} onClick={generate}>
+              <Button disabled={saving||calendarLoading||!!calendarError} onClick={generate}>
                 <Shuffle size={17} />
                 {roundGames.length ? 'Refazer sorteio' : 'Gerar sorteio'}
               </Button>

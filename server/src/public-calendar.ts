@@ -1,7 +1,8 @@
 import {db} from './db.ts';
+import {normalizeCalendar,weekdayNames} from '../../lib/weekly-calendar.ts';
+import {divisions} from '../../lib/tournament.ts';
 export async function publicCalendar(){
  const row=await db.setting.findUnique({where:{key:'weekly-calendar'}});
- const value=row?JSON.parse(row.value):{weekday:null,time:null};
- const days=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
- return {day:Number.isInteger(value.weekday)&&value.weekday>=0&&value.weekday<7?days[value.weekday]:null,time:value.time??null,location:'Premier Padel Club',timezone:'Africa/Luanda'};
+ const value=normalizeCalendar(row?JSON.parse(row.value):null);
+ return {divisions:divisions.map(division=>({division,day:weekdayNames[value.divisions[division].weekday],time:value.divisions[division].time})),location:'Premier Padel Club',timezone:'Africa/Luanda'};
 }

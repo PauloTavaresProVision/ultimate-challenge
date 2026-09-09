@@ -45,6 +45,22 @@ export default function WhatsAppLive() {
   const [message, setMessage] = useState('Olá! Esta é uma mensagem de teste do Ultimate Challenge. A ligação ao WhatsApp está a funcionar.');
   const [testResult, setTestResult] = useState('');
   const [testError, setTestError] = useState('');
+  const [testId,setTestId]=useState<string|null>(null);
+  useEffect(()=>{setTestId(localStorage.getItem('wa-last-test'));},[]);
+  useEffect(()=>{
+    if(!testId)return;
+    let active=true;
+    const poll=async()=>{
+      try{
+        const result=await api<{status:string;recipient?:string}>(`/admin/whatsapp/test/${testId}`);
+        if(!active)return;
+        const labels:Record<string,string>={sending:'A enviar…',sent:'Enviado ao WhatsApp. A aguardar confirmação de entrega.',accepted:'Aceite pelo WhatsApp. A aguardar entrega.',delivered:'Entregue ao destinatário.',read:'Lido pelo destinatário.',failed:'O WhatsApp rejeitou o envio.',uncertain:'O envio ficou sem confirmação. Continuamos a consultar os recibos; não será repetido automaticamente.',not_found:'O servidor ainda não registou este teste. Podes tentar novamente: será usado o mesmo identificador.'};
+        setTestError('');setTestResult(`${result.recipient?'+'+result.recipient+' · ':''}${labels[result.status]??'A consultar envio…'}`);
+      }catch{if(active)setTestError('Sem ligação ao servidor. A recuperar o estado deste envio automaticamente.');}
+    };
+    void poll();const timer=setInterval(poll,3000);
+    return()=>{active=false;clearInterval(timer);};
+  },[testId]);
   const connected = state.status === 'connected';
   const engineLabel = state.engine === 'webjs' ? 'WhatsApp Web' : state.engine === 'baileys' ? 'Baileys' : 'A verificar';
   const statusLabel = ({ loading: 'A verificar', connected: 'Ligado', connecting: 'A ligar', syncing: 'Associado. A concluir ligação…', qr: 'Aguardar leitura do QR', disconnected: 'Desligado', logged_out: 'Sessão terminada', error: 'Erro de ligação' } as Record<string, string>)[state.status] ?? state.status;
@@ -121,13 +137,15 @@ export default function WhatsAppLive() {
         <header className="wa-card-heading"><div className="wa-icon"><Send size={19} /></div><div><h2>Testar envio</h2><p>Confirma a ligação com uma mensagem privada.</p></div></header>
         <form className="wa-test-form" onSubmit={async e => {
           e.preventDefault(); setBusy('test'); setTestError(''); setTestResult('');
-          try { const result = await api<{ sentAt?: string; pending?: boolean }>('/admin/whatsapp/test', 'POST', { phone: phone.replace(/[\s()-]/g, ''), message }); setTestResult(result.pending ? 'O teste continua a ser processado. Confirma a receção no WhatsApp ou consulta o histórico de mensagens antes de repetir.' : `Enviada às ${new Date(result.sentAt!).toLocaleTimeString('pt-PT')}. Confirma a receção no telemóvel do destinatário.`); }
-          catch (err) { setTestError((err as Error).message); } finally { setBusy(''); }
+          const id=testId??crypto.randomUUID();localStorage.setItem('wa-last-test',id);setTestId(id);setTestResult('A registar o teste…');
+          try { await api('/admin/whatsapp/test', 'POST', {id, phone: phone.replace(/[\s()-]/g, ''), message }); }
+          catch { setTestError('A recuperar o estado deste teste automaticamente. O envio não será repetido.'); } finally { setBusy(''); }
         }}>
           <div className="wa-field"><div className="wa-label-row"><label htmlFor="wa-phone">Destinatário</label>{state.account?.phone && <button type="button" onClick={() => setPhone(state.account!.phone!)}>Usar número ligado</button>}</div><Input id="wa-phone" type="tel" autoComplete="tel" placeholder="+244 9XX XXX XXX" required pattern="[+][0-9 ()-]{8,20}" value={phone} onChange={e => setPhone(e.target.value)} /><small>Inclui o indicativo do país.</small></div>
           <div className="wa-field"><label htmlFor="wa-message">Mensagem de teste</label><Textarea id="wa-message" required maxLength={1000} rows={3} value={message} onChange={e => setMessage(e.target.value)} /></div>
           <div className="wa-test-footer"><span>Envio apenas para este número</span><Button type="submit" disabled={!connected || !!busy || !phone || !message.trim()}><Send size={15} />{busy === 'test' ? 'A enviar…' : 'Enviar teste'}</Button></div>
-          {testResult && <p className="wa-success" role="status"><Check size={16} />{testResult}</p>}{testError && <p className="form-error" role="alert">{testError}</p>}
+          {testResult && <p role="status">{testResult}</p>}{testError && <p className="form-error" role="alert">{testError}</p>}
+          {testId && <Button type="button" variant="outline" disabled={!!busy} onClick={()=>{localStorage.removeItem('wa-last-test');setTestId(null);setTestResult('');setTestError('');}}>Preparar outro teste</Button>}
         </form>
       </section>
     </div>

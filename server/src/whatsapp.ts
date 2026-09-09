@@ -123,13 +123,24 @@ export class WhatsApp {
       ? { name: user.name || null, phone: phoneFromJid(jidNormalizedUser(user.id)) }
       : null;
   }
-  async sendTest(phone: string, text: string) {
+  async startTest(id:string,phone:string,text:string){
+    const existing=await db.outbox.findUnique({where:{id}});
+    if(existing){if(existing.kind!=='test'||existing.recipient!==`${phone.slice(1)}@s.whatsapp.net`)throw new Error('Identificador já utilizado.');return {id};}
+    if(this.status!=='connected')throw new Error('WhatsApp desligado.');
+    try{await db.outbox.create({data:{id,recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});}
+    catch(e){if((e as {code?:string}).code==='P2002')return {id};throw e;}
+    void this.sendTest(phone,text,id).catch(async()=>{
+      await db.outbox.updateMany({where:{id,status:'sending'},data:{status:'uncertain'}});
+    }).catch(()=>{});
+    return {id};
+  }
+  async sendTest(phone: string, text: string, reservedId?:string) {
     if (!this.socket || this.status !== 'connected')
       throw new Error('Liga o WhatsApp antes de enviar o teste.');
     if (!await this.canSend()) throw new Error(this.gate.reason ?? 'Envios em espera.');
     const socket=this.socket;
     if(!socket)throw new Error('Ligação interrompida.');
-    const row=await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
+    const row=reservedId?await db.outbox.findUniqueOrThrow({where:{id:reservedId}}):await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
     try {
       const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
       if(this.socket!==socket||this.status!=='connected')throw new Error('Ligação alterada antes do teste.');

@@ -9,13 +9,12 @@ import express from 'express';
 import { syncEnvironmentAdmin } from './admin-bootstrap.ts';
 import { installAdminState } from './admin-state.ts';
 import helmet from 'helmet';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { WhatsApp } from './whatsapp.ts';
-import {testSendResponse} from './test-send-response.ts';
 import {automaticPaused,setAutomaticPaused} from './whatsapp-pause.ts';
 import { resultWinner } from './game-results.ts';
 import { runCompetition } from './competition.ts';
@@ -357,18 +356,29 @@ app.post('/api/admin/whatsapp/pause', auth, admin, async (req,res)=>{
   await setAutomaticPaused(paused);res.json({automaticPaused:paused});
 });
 app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
-  const { phone, message } = z.object({
+  const { phone, message, id } = z.object({
+    id:z.string().uuid().default(()=>randomUUID()),
     phone: z.string().regex(/^\+[1-9]\d{7,14}$/),
     message: z.string().trim().min(1).max(1000),
   }).parse(req.body);
   await limited('whatsapp:test', 5, 60);
   if (wa.status !== 'connected') fail(409, 'Liga o WhatsApp antes de enviar o teste.');
   try {
-    const result=await testSendResponse(wa.sendTest(phone, message));
-    res.status('pending' in result?202:200).json(result);
+    res.status(202).json(await wa.startTest(id,phone,message));
   } catch {
     fail(wa.sendingPausedReason ? 409 : 502, wa.sendingPausedReason ?? 'Não foi possível confirmar o envio. Verifica o estado da mensagem antes de repetir.');
   }
+});
+app.get('/api/admin/whatsapp/test/:id',auth,admin,async(req,res)=>{
+  const id=z.string().uuid().parse(req.params.id);
+  const row=await db.outbox.findUnique({where:{id}});
+  if(!row||row.kind!=='test')return res.json({id,status:'not_found'});
+  const mapping=await db.setting.findUnique({where:{key:'outbox-message:'+id}});
+  const receipt=mapping?await db.setting.findUnique({where:{key:'wa-receipt:'+mapping.value}}):null;
+  const code=receipt?Number(receipt.value):null;
+  const stored=row.status==='sending'&&Date.now()-row.createdAt.getTime()>120000?'uncertain':row.status;
+  const status=code===0?'failed':code!==null&&code>=4?'read':code===3?'delivered':code===2?'accepted':stored;
+  res.json({id,status,sentAt:row.sentAt,recipient:row.recipient.split('@')[0]});
 });
 app.post('/api/admin/whatsapp/engine', auth, admin, async (req,res)=>{
   const {engine}=z.object({engine:z.enum(['baileys','webjs'])}).parse(req.body);

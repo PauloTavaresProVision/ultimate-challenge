@@ -33,6 +33,12 @@ try{
  await setAutomaticPaused(true);assert.equal(await automaticPaused(),true);
  assert.equal(await claimDelivery(),null);await wa.deliver();assert.equal(sends,0);assert.equal(await db.outbox.count({where:{status:'pending'}}),5);
  await wa.sendTest('+244900000001','Explicit test');assert.equal(sends,1);assert.equal(await automaticPaused(),true);
+ const testId='a1261864-cda8-4be4-84d6-2226e94eb257';
+ await Promise.all([wa.startTest(testId,'+244900000001','Tracked test'),wa.startTest(testId,'+244900000001','Tracked test')]);
+ await new Promise(r=>setTimeout(r,100));
+ assert.equal(sends,2,'Concurrent requests for one test must send only once');
+ await wa.startTest(testId,'+244900000001','Tracked test');assert.equal(sends,2);
+ assert.equal((await db.outbox.findUnique({where:{id:testId}})).status,'sent');
  await wa.disconnect();const reloaded=new WhatsApp();await reloaded.initialize();assert.equal(await automaticPaused(),true);
  await setAutomaticPaused(false);assert(await claimDelivery());assert.equal(await db.outbox.count({where:{status:'pending'}}),4);
  console.log('PASS: pause persists, all automatic kinds remain queued, explicit test is allowed, resume claims pending work. No real WhatsApp messages sent.');

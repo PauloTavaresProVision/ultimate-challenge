@@ -52,7 +52,19 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     async sendMessage(id,content){check();const result=await client.sendMessage(toWebId(id),content.text,
       {mentions:content.mentions?.map(toWebId),sendSeen:false});return result?{key:{id:result.id._serialized}}:undefined;},
     async groupMetadata(id){return metadata(await group(id));},
-    async groupFetchAllParticipating(){check();const chats=await client.getChats();return Object.fromEntries(chats.filter(c=>c.isGroup).map(c=>[c.id._serialized,{id:c.id._serialized,subject:c.name,participants:[]}]));},
+    async groupFetchAllParticipating(){
+      check();
+      // Read only group identifiers and names. getChats serializes every private
+      // conversation and its last message, which is unnecessary for this selector.
+      const page=client.pupPage;if(!page)throw new Error('Navegador WhatsApp indisponível.');
+      const groups=await page.evaluate(()=>{
+        const w=globalThis as unknown as {require:(name:string)=>{Chat:{getModelsArray:()=>Array<{id?:{_serialized?:string};name?:string;groupMetadata?:{subject?:string}}>}}};
+        return w.require('WAWebCollections').Chat.getModelsArray()
+          .filter(c=>c.id?._serialized?.endsWith('@g.us'))
+          .map(c=>({id:c.id!._serialized!,subject:c.name||c.groupMetadata?.subject||c.id!._serialized!}));
+      });
+      return Object.fromEntries(groups.map(g=>[g.id,{...g,participants:[]}]));
+    },
     async groupInviteCode(id){return (await group(id)).getInviteCode();},
     async groupParticipantsUpdate(id,participants){
       const results=await (await group(id)).addParticipants(participants.map(toWebId),{autoSendInviteV4:false});

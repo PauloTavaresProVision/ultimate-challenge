@@ -26,6 +26,15 @@ try{
  try {
  socket=await openWebWhatsApp(options,opts=>{assert.equal(opts.takeoverOnConflict,false);assert.equal(opts.webVersionCache.path,'/tmp/web-profile/web-cache');return fake;});
  await new Promise(r=>setImmediate(r));assert.equal(ready,1);
+ fake.pupPage={evaluate:async fn=>{
+  const previous=globalThis.require;
+  globalThis.require=name=>{assert.equal(name,'WAWebCollections');return {Chat:{getModelsArray:()=>[
+   {id:{_serialized:'123@g.us'},name:'Torneio'},
+   {id:{_serialized:'456@c.us'},get name(){throw Error('Private chat must not be read');}}
+  ]}};};
+  try{return fn();}finally{globalThis.require=previous;}
+ }};
+ assert.deepEqual(await socket.groupFetchAllParticipating(),{'123@g.us':{id:'123@g.us',subject:'Torneio',participants:[]}});
  await assert.rejects(loadPostgresAuth({connectionString:config.DATABASE_URL,encryptionKey:config.MESSAGE_KEY,folder:'/tmp/unused',onFailure:()=>{}}),/outro processo/);
  assert.equal(socket.user.id,'244900000001@s.whatsapp.net');
  await socket.sendMessage('244900000002@s.whatsapp.net',{text:'test',mentions:['244900000003@s.whatsapp.net']});assert.equal(sent[0].id,'244900000002@c.us');assert.equal(sent[0].opts.sendSeen,false);assert.deepEqual(sent[0].opts.mentions,['244900000003@c.us']);

@@ -36,6 +36,7 @@ export default function WhatsAppLive() {
   const [selected, setSelected] = useState<Group | null>(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupError,setGroupError]=useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
@@ -55,9 +56,9 @@ export default function WhatsAppLive() {
     return () => { active = false; clearInterval(timer); };
   }, []);
   async function loadGroups() {
-    setLoadingGroups(true); setError('');
+    setLoadingGroups(true); setGroupError('');
     try { setGroups((await api<Group[]>('/admin/whatsapp/groups')).sort((a, b) => a.name.localeCompare(b.name))); setGroupsLoaded(true); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setGroupError('Não foi possível carregar os grupos. A ligação pode continuar ativa; tenta carregar os grupos novamente.'); }
     finally { setLoadingGroups(false); }
   }
   useEffect(() => { if (connected) void loadGroups(); }, [connected]);
@@ -113,6 +114,7 @@ export default function WhatsAppLive() {
           </Combobox>
         </div>
         <div className="wa-group-footer"><span>{loadingGroups ? 'A atualizar…' : groupsLoaded ? `${groups.length} grupos disponíveis` : 'Grupos carregados após a ligação'}</span><Button disabled={!connected || !selected || selected.id === state.groupId || !!busy} onClick={async () => { if (selected && await action('/admin/whatsapp/group', { id: selected.id })) setSelected(null); }}>Associar grupo <ArrowUpRight size={15} /></Button></div>
+        {groupError && <p className="form-error" role="alert">{groupError}</p>}
         <p className="wa-footnote">Para enviar convites de entrada, o número ligado deve ser administrador do grupo.</p>
       </section>
       <section className="wa-card">

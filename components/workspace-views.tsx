@@ -82,6 +82,7 @@ import {
   type Division,
 } from '@/lib/tournament';
 type Props = {
+  editingRef?: {current:boolean};
   saving?: boolean;
   onSavePlayers?: (players: Player[], audit: string[]) => Promise<void>;
   onSaveChanges?: (changes: {courts?:Court[];games?:Game[];audit:string[]}) => Promise<void>;
@@ -161,6 +162,7 @@ const blankPlayer: Player = {
   note: '',
 };
 export default function WorkspaceViews({
+  editingRef,
   live = false,
   audit,
   setAudit,
@@ -182,6 +184,10 @@ export default function WorkspaceViews({
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
   const [editCourt, setEditCourt] = useState<Court | null>(null);
   const [editGame, setEditGame] = useState<Game | null>(null);
+  useEffect(()=>{
+    if(editingRef)editingRef.current=!!(editPlayer||editCourt||editGame);
+    return()=>{if(editingRef)editingRef.current=false;};
+  },[editingRef,editPlayer,editCourt,editGame]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');

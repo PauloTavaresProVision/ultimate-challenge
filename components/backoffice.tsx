@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -33,7 +33,7 @@ import {
 import { Button } from '@/components/ui/button';
 import WorkspaceViews from '@/components/workspace-views';
 import AgentTools from '@/components/agent-tools';
-import WhatsAppLive from '@/components/whatsapp-live';
+import WhatsAppLive, {api} from '@/components/whatsapp-live';
 import type { Player, Court, Game } from '@/lib/tournament';
 export type LiveState = {
   players: Player[];
@@ -148,11 +148,40 @@ export default function Backoffice({
   const [revision, setRevision] = useState(liveState?.revision ?? 0);
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
+  const saveEpoch = useRef(0);
+  const editing = useRef(false);
+  const currentRevision = useRef(revision);
+  currentRevision.current = revision;
+  const [syncError,setSyncError] = useState(false);
+  useEffect(()=>{
+    if(!liveState)return;
+    let active=true,fetching=false;
+    async function refresh(){
+      if(!active||fetching||saveLock.current||editing.current||document.visibilityState==='hidden')return;
+      fetching=true;
+      const epoch=saveEpoch.current;
+      try{
+        const next=await api<LiveState>('/admin/state');
+        if(!active||saveLock.current||editing.current||epoch!==saveEpoch.current)return;
+        setSyncError(false);
+        if(next.revision>currentRevision.current){
+          currentRevision.current=next.revision;
+          setPlayers(next.players);setCourts(next.courts);setGames(next.games);setAudit(next.audit);setRevision(next.revision);
+        }
+      }catch{if(active)setSyncError(true);}finally{fetching=false;}
+    }
+    void refresh();
+    const timer=setInterval(refresh,10000);
+    window.addEventListener('focus',refresh);
+    document.addEventListener('visibilitychange',refresh);
+    return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+  },[!!liveState]);
   const [saveNote, setSaveNote] = useState('');
   async function save(nextPlayers?: Player[], nextAudit?: string[], changes?: Partial<LiveState>) {
     if (!onSave) return;
     if (saveLock.current) throw new Error('Aguarda a conclusão da ação anterior.');
     saveLock.current = true;
+    saveEpoch.current++;
     setSaving(true);
     try {
       const saved = await onSave({ players: nextPlayers ?? players, courts, games, audit: nextAudit ?? audit, revision, ...changes });
@@ -161,12 +190,14 @@ export default function Backoffice({
       setGames(saved.games);
       setAudit(saved.audit);
       setRevision(saved.revision);
+      currentRevision.current=saved.revision;
       setSaveNote('Alterações guardadas na base de dados.');
     } catch (e) {
       setSaveNote((e as Error).message);
       throw e;
     } finally {
       saveLock.current = false;
+      saveEpoch.current++;
       setSaving(false);
     }
   }
@@ -218,7 +249,7 @@ export default function Backoffice({
             </span>
             <span>
               {liveState
-                ? 'Cada ação é guardada ao confirmar.'
+                ? (syncError?'Sem atualização automática. A tentar restabelecer a ligação…':'Atualização automática · a cada 10 segundos')
                 : 'Dados fictícios · alterações válidas durante esta sessão'}
             </span>
           </div>
@@ -512,6 +543,7 @@ export default function Backoffice({
             <WhatsAppLive />
           ) : (
             <WorkspaceViews
+              editingRef={editing}
               saving={saving}
               onSavePlayers={onSave ? save : undefined}
               onSaveChanges={onSave ? (changes) => save(undefined, undefined, changes) : undefined}

@@ -361,14 +361,14 @@ export class WhatsApp {
         qr:qr=>{const revision=++qrRevision;void QRCode.toDataURL(qr).then(data=>{if(revision===qrRevision&&generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
         authenticated:()=>{if(generation!==this.generation)return;qrRevision++;this.qr=null;this.status='syncing';},
         ready:()=>{if(generation!==this.generation)return;qrRevision++;this.status='connected';this.qr=null;this.lastError=null;this.failures=0;this.connectedAt=new Date().toISOString();void this.reconcileWelcomes().catch(()=>{});},
-        closed:revoked=>{if(generation!==this.generation)return;
+        closed:(revoked,startupError)=>{if(generation!==this.generation)return;
           const closed=++this.generation;const previous=this.socket;this.socket=null;this.qr=null;
-          this.status=revoked?'logged_out':'disconnected';
-          this.lastError=revoked?'O WhatsApp Web terminou a sessão. Associa novamente por QR.':'WhatsApp Web interrompido. A recuperar a ligação.';
+          this.status=startupError?'error':revoked?'logged_out':'disconnected';
+          this.lastError=startupError??(revoked?'O WhatsApp Web terminou a sessão. Associa novamente por QR.':'WhatsApp Web interrompido. A recuperar a ligação.');
           const closing=Promise.resolve(previous?.end());this.closingSocket=closing;
           void closing.then(()=>{
             if(closed!==this.generation||!this.enabled)return;
-            if(revoked){this.enabled=false;return;}
+            if(revoked||startupError){this.enabled=false;return;}
             this.failures=Math.min(this.failures+1,8);
             this.timer=setTimeout(()=>{this.timer=null;if(closed===this.generation&&this.enabled)void this.open();},Math.min(60000,2000*2**this.failures));
           }).catch(()=>{if(closed===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível encerrar o navegador anterior.';}}).finally(()=>{if(this.closingSocket===closing)this.closingSocket=null;});

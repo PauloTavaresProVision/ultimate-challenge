@@ -4,13 +4,15 @@ import {Client as PgClient} from 'pg';
 import {resolve} from 'node:path';
 import type {WAMessage} from '@whiskeysockets/baileys';
 import type {GroupInfo,MessagingSocket} from './whatsapp-transport.ts';
+import {webStartupError} from './whatsapp-web-error.ts';
+import {recoverBrowserLock} from './whatsapp-browser-lock.ts';
 
 export const toWebId=(id:string)=>id.replace(/@s\.whatsapp\.net$/,'@c.us');
 export const fromWebId=(id:string)=>id.replace(/@c\.us$/,'@s.whatsapp.net');
 export const webReceipt=(ack:number)=>({[-1]:0,1:2,2:3,3:4,4:5} as Record<number,number>)[ack];
 
 export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;executablePath?:string;
-  qr:(qr:string)=>void;authenticated?:()=>void;ready:()=>void;closed:(revoked:boolean)=>void;
+  qr:(qr:string)=>void;authenticated?:()=>void;ready:()=>void;closed:(revoked:boolean,startupError?:string)=>void;
   message:(message:WAMessage)=>void;receipt:(id:string,status:number)=>void;joined:(group:string,ids:string[])=>void;
 }, createClient:(options:ClientOptions)=>WebClient=options=>new WWebJS.Client(options)):Promise<MessagingSocket> {
   const lease=new PgClient({connectionString:options.databaseUrl,connectionTimeoutMillis:10000,keepAlive:true});
@@ -24,6 +26,7 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     await lease.connect();
     const lock=await lease.query('SELECT pg_try_advisory_lock(186937789,1) AS owned');
     if(!lock.rows[0].owned)throw new Error('Outra ligação WhatsApp está ativa.');
+    await recoverBrowserLock(resolve(options.folder,'session-ultimate'));
     client=createClient({
       authStrategy:new WWebJS.LocalAuth({clientId:'ultimate',dataPath:resolve(options.folder)}),
       takeoverOnConflict:false,authTimeoutMs:60000,qrMaxRetries:8,
@@ -86,6 +89,11 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
   })().catch(()=>console.error('WhatsApp Web: falha ao ler mensagem do grupo.'));});
   // Let the caller install ownership before any browser callback is delivered.
   initialization=new Promise<void>(resolve=>setImmediate(resolve)).then(()=>{if(!stopped)return client.initialize();});
-  void initialization.catch(()=>reportClose(false));
+  void initialization.catch(error=>{
+    if(stopped)return;
+    const detail=webStartupError(error);
+    console.error('WhatsApp Web arranque:',detail);
+    ready=false;options.closed(false,detail);
+  });
   return socket;
 }

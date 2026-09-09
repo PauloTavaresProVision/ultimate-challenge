@@ -12,7 +12,7 @@ try{
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
 
 
- docker(['cp','server/src/whatsapp.ts',container+':/app/server/src/whatsapp.ts']);
+ for(const name of ['whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';
@@ -39,6 +39,13 @@ try{
  const auth=await loadPostgresAuth({connectionString:config.DATABASE_URL,encryptionKey:config.MESSAGE_KEY,folder:'/tmp/unused',onFailure:()=>{}});await auth.close();
  const wa=new WhatsApp(async()=>socket);await wa.initialize();await wa.selectEngine('webjs');await wa.connect();assert.equal(wa.engine,'webjs');await wa.selectEngine('baileys');assert.equal(wa.status,'disconnected');assert.equal(wa.engine,'baileys');
  const restored=new WhatsApp();await restored.initialize();assert.equal(restored.engine,'baileys');
+ let starts=0;
+ const broken=new WhatsApp(opts=>openWebWhatsApp(opts,()=>{
+   const client=new EventEmitter();Object.assign(client,{initialize:async()=>{starts++;throw new Error('ProcessSingleton profile in use');}});return client;
+ }));
+ await broken.selectEngine('webjs');await broken.connect();await new Promise(r=>setTimeout(r,100));
+ assert.equal(broken.status,'error');assert.match(broken.lastError,/perfil.*bloqueado/);
+ await new Promise(r=>setTimeout(r,4500));assert.equal(starts,1,'Startup failures must not restart Chromium indefinitely');await broken.disconnect();
  console.log('PASS: exclusive ownership across engines, saved selection, switching closes previous socket, phone/LID mapping, mentions, quoted messages, group addition, receipts and stale-event guards. No WhatsApp messages sent.');
  }finally{await socket?.end();await db.$disconnect();}
  `);console.log(output.trim());

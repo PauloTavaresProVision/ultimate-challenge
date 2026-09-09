@@ -31,6 +31,15 @@ try{
  const messages=await db.outbox.findMany();const bodies=messages.map(m=>decrypt(m.encryptedBody,config.MESSAGE_KEY));assert(bodies.every(b=>b.includes('/inscricao?convite=')));assert.notEqual(bodies[0],bodies[1]);
  const bindings=await db.setting.findMany({where:{key:{startsWith:'invite-target:'}}});assert.equal(bindings.length,2);
  const status=await fetch('http://127.0.0.1:3200/api/admin/invite-deliveries/'+input.batchId,{headers:{Authorization:'test'}});assert.equal(status.status,200);assert((await status.json()).every(r=>r.status==='pending'));
+ const history=()=>fetch('http://127.0.0.1:3200/api/admin/invite-history',{headers:{Authorization:'test'}}).then(r=>r.json());
+ const before=await history();assert.equal(before.total,2);assert(before.items.every(i=>i.registration==='pending'));assert(!JSON.stringify(before).includes('encryptedBody'));
+ assert.equal((await request({...input,batchId:randomUUID()})).status,409);
+ await db.outbox.updateMany({data:{status:'sent'}});
+ const resend={batchId:randomUUID(),phones:['+244900000001'],message:'Reenvio'};
+ assert.equal((await request(resend)).status,200);assert.equal((await history()).total,3);
+ await db.player.create({data:{name:'Jogador inscrito',phone:'+351900000002',birth:new Date('1990-01-01'),side:'Direita',division:'M1',verified:true,status:'Pendente'}});
+ const registered=(await history()).items.find(i=>i.phone==='+351900000002');assert.equal(registered.registration,'registered');assert.equal(registered.canResend,false);
+ assert.equal((await request({batchId:randomUUID(),phones:['+351900000002'],message:'Não reenviar'})).status,409);
  console.log('PASS: validation, connection guard, duplicate recipients, concurrent idempotency, individual encrypted links, phone binding and status. No messages sent.');
  }finally{server.close();await db.$disconnect();}
  `);console.log(output.trim());

@@ -1,4 +1,5 @@
 import InviteDialog from './invite-dialog';
+import InviteHistory from './invite-history';
 import MessageCenter from './message-center';
 import { useEffect, useState } from 'react';
 import { MessageCircle, Smartphone, Users, RefreshCw, Send, Link2, Copy, Check, ArrowUpRight, Unplug, QrCode } from 'lucide-react';
@@ -104,6 +105,7 @@ export default function WhatsAppLive() {
     <section className="wa-invite"><div className="wa-icon"><Link2 size={20} /></div><div className="wa-invite-copy"><h2>Inscrições por convite</h2><p>Um link por jogador, válido durante 7 dias. A entrada continua sujeita à tua aprovação.</p></div><InviteDialog connected={connected}/>
       {note && <div className="wa-invite-link"><a href={note}>{note}</a><Button variant="outline" onClick={() => navigator.clipboard.writeText(note).then(() => setCopied(true)).catch(() => setError('Seleciona e copia o link manualmente.'))}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copiado' : 'Copiar link'}</Button></div>}
     </section>
+    <InviteHistory connected={connected}/>
     <MessageCenter />
     <div className="wa-command"><MessageCircle size={17} /><p>Os jogadores podem escrever <code>/escada</code> no grupo para consultar a divisão e o próximo jogo. São identificados pelo número validado no registo.</p></div>
   </div>;

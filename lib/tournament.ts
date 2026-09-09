@@ -1,4 +1,4 @@
-export const divisions = ['M1+', 'M1', 'M2'] as const;
+export const divisions = ['M1+', 'M1', 'M2+', 'M2'] as const;
 export type Division = (typeof divisions)[number];
 export type Player = {
   id: string;

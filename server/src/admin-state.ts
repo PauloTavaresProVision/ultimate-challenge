@@ -17,7 +17,7 @@ const player = z.object({
       (v) => v >= '1900-01-01' && v < new Date().toISOString().slice(0, 10),
     ),
   side: z.enum(['Esquerda', 'Direita']),
-  division: z.enum(['M1+', 'M1', 'M2']),
+  division: z.enum(['M1+', 'M1', 'M2+', 'M2']),
   status: z.enum(['Ativo', 'Inativo', 'Pendente', 'Rejeitado']),
   verified: z.boolean(),
   note: z.string().max(500),
@@ -31,7 +31,7 @@ const court = z.object({
 const game = z.object({
   id: z.string(),
   round: z.number().int().positive(),
-  division: z.enum(['M1+', 'M1', 'M2']),
+  division: z.enum(['M1+', 'M1', 'M2+', 'M2']),
   a: z.array(z.string()).length(2),
   b: z.array(z.string()).length(2),
   court: z.string(),
@@ -238,7 +238,7 @@ export function installAdminState(
         if (!group) bad('Associa primeiro o grupo Escada.');
         const name = (id: string) =>
           data.players.find((p) => p.id === id)!.name;
-        const text = `🎾 Escada · Jogos\n\n${['M1+', 'M1', 'M2']
+        const text = `🎾 Escada · Jogos\n\n${['M1+', 'M1', 'M2+', 'M2']
           .map((d) => {
             const gs = published.filter((g) => g.division === d);
             return gs.length

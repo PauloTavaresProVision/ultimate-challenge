@@ -20,20 +20,21 @@ try {
   assert.ok(healthy, 'Isolated test server started');
   docker(['cp','server/src/competition.ts',container+':/app/server/src/competition.ts']);
   docker(['cp','server/src/competition-rules.ts',container+':/app/server/src/competition-rules.ts']);
+  docker(['cp','lib/tournament.ts',container+':/app/lib/tournament.ts']);
   docker(['exec','-i',container,'node','--import','tsx','--input-type=module'], `
     import assert from 'node:assert/strict';
     import {db} from './src/db.ts';
     import {runCompetition} from './src/competition.ts';
-    for(const [d,division] of ['M1+','M1','M2'].entries()) for(let i=0;i<4;i++) await db.player.create({data:{id:'p'+d+i,name:'Player '+d+i,phone:'+244900000'+d+i,birth:new Date((1980+i)+'-01-01'),side:i%2?'Direita':'Esquerda',division,status:'Ativo',verified:true}});
+    for(const [d,division] of ['M1+','M1','M2+','M2'].entries()) for(let i=0;i<4;i++) await db.player.create({data:{id:'p'+d+i,name:'Player '+d+i,phone:'+244900000'+d+i,birth:new Date((1980+i)+'-01-01'),side:i%2?'Direita':'Esquerda',division,status:'Ativo',verified:true}});
     await db.court.create({data:{id:'c',name:'Test',location:'Isolated'}});
-    for(const [d,division] of ['M1+','M1','M2'].entries()) await db.game.create({data:{id:'g'+d,round:1,division,a:['p'+d+0,'p'+d+1],b:['p'+d+2,'p'+d+3],courtId:'c',date:'2090-09-01',time:'18:00',duration:90,winner:'a',published:true}});
+    for(const [d,division] of ['M1+','M1','M2+','M2'].entries()) await db.game.create({data:{id:'g'+d,round:1,division,a:['p'+d+0,'p'+d+1],b:['p'+d+2,'p'+d+3],courtId:'c',date:'2090-09-01',time:'18:00',duration:90,winner:'a',published:true}});
     await runCompetition('2090-09-14');
     assert.equal(await db.setting.count({where:{key:{startsWith:'competition:move:'}}}),0);
     await Promise.all([runCompetition('2090-09-15'),runCompetition('2090-09-15')]);
     assert.equal(await db.setting.count({where:{key:{startsWith:'competition:move:'}}}),1);
     assert.equal((await db.revision.findUnique({where:{id:1}})).value,1);
     assert.equal((await db.player.findUnique({where:{id:'p10'}})).division,'M1+');
-    for(const [d,division] of ['M1+','M1','M2'].entries()) {
+    for(const [d,division] of ['M1+','M1','M2+','M2'].entries()) {
       const p=await db.player.findMany({where:{division},orderBy:{id:'asc'}});
       const left=p.filter(x=>x.side==='Esquerda'),right=p.filter(x=>x.side==='Direita');
       await db.game.create({data:{id:'second'+d,round:2,division,a:[left[0].id,right[0].id],b:[left[1].id,right[1].id],courtId:'c',date:'2090-09-20',time:'18:00',duration:90,winner:'a',published:true}});
@@ -42,9 +43,9 @@ try {
     await runCompetition('2090-10-01');
     await runCompetition('2090-10-01');
     const record=JSON.parse((await db.setting.findUnique({where:{key:'competition:month:2090-09'}})).value);
-    assert.equal(record.champions.length,3);assert.ok(record.champions.every(c=>c.player));assert.equal(record.table.length,12);
+    assert.equal(record.champions.length,4);assert.ok(record.champions.every(c=>c.player));assert.equal(record.table.length,16);
     assert.ok(record.table.every(p=>p.wins+p.losses===2));assert.equal((await db.revision.findUnique({where:{id:1}})).value,3);
-    assert.equal(await db.game.count(),6);
+    assert.equal(await db.game.count(),8);
     await runCompetition('2090-10-13');
     assert.equal(JSON.parse((await db.setting.findUnique({where:{key:'competition:status'}})).value).blocked,null);
     assert.equal((await db.revision.findUnique({where:{id:1}})).value,4);

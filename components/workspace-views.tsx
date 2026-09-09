@@ -453,7 +453,7 @@ export default function WorkspaceViews({
       })
       .filter(Boolean);
     setMessage(
-      `🎾 Ultimate Challenge · Ronda ${nextRound}\n\n${sections.join('\n\n──────────\n\n')}\n\nO link de resultados das três divisões será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
+      `🎾 Ultimate Challenge · Ronda ${nextRound}\n\n${sections.join('\n\n──────────\n\n')}\n\nO link de resultados das quatro divisões será incluído quando a integração estiver ativa.\n\nPré-visualização — nenhuma mensagem foi enviada.`,
     );
   }
   return (
@@ -666,7 +666,7 @@ export default function WorkspaceViews({
           <div className="info-note">
             <Trophy size={20} />
             <span>
-              <strong>3 divisões. 3 vencedores.</strong> O jogador com mais
+              <strong>4 divisões. 4 vencedores.</strong> O jogador com mais
               pontos vence, independentemente do lado. Em caso de empate, vence
               o mais velho.
             </span>
@@ -820,7 +820,7 @@ export default function WorkspaceViews({
               <div>
                 <h2>Preparar a ronda {String(nextRound).padStart(2, '0')}</h2>
                 <p>
-                  O sorteio abrange as três divisões. Cada jogador faz quatro jogos de 20 minutos, com dupla fixa e rotação de campos.
+                  O sorteio abrange as quatro divisões. Cada jogador faz quatro jogos de 20 minutos, com dupla fixa e rotação de campos.
                 </p>
               </div>
               <Badge tone="neutral">Rascunho</Badge>
@@ -925,7 +925,7 @@ export default function WorkspaceViews({
                 <div>
                   <h2>Mensagem para o grupo Ultimate Challenge</h2>
                   <p>
-                    Uma mensagem com os jogos de M1+, M1 e M2. O envio ainda não
+                    Uma mensagem com os jogos de M1+, M1, M2+ e M2. O envio ainda não
                     está ligado.
                   </p>
                 </div>
@@ -1003,7 +1003,7 @@ export default function WorkspaceViews({
             <Unplug size={25} />
           </section>
           <section className="panel group-card">
-            <Badge tone="neutral">M1+ · M1 · M2</Badge>
+            <Badge tone="neutral">M1+ · M1 · M2+ · M2</Badge>
             <h2>Grupo Ultimate Challenge</h2>
             <p>Um único grupo para todos os jogadores · por associar</p>
             <div className="info-note compact">
@@ -1033,7 +1033,7 @@ export default function WorkspaceViews({
                 Escada.
               </li>
               <li>
-                Publicação semanal dos jogos das três divisões, com campo, hora
+                Publicação semanal dos jogos das quatro divisões, com campo, hora
                 e link de resultados.
               </li>
             </ol>
@@ -1086,7 +1086,7 @@ export default function WorkspaceViews({
             </div>
             <div className="rules-grid">
               {[
-                ['Divisões', 'M1+, M1 e M2'],
+                ['Divisões', 'M1+, M1, M2+ e M2'],
                 ['Frequência', '4 jogos de 20 minutos por semana'],
                 ['Vitória', '3 pontos'],
                 ['Derrota', '1 ponto'],

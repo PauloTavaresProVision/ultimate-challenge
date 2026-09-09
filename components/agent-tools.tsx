@@ -48,7 +48,7 @@ export default function AgentTools({
           !('division' in input) ||
           !divisions.includes(input.division as (typeof divisions)[number])
         )
-          throw new Error('A divisão deve ser M1+, M1 ou M2.');
+          throw new Error('A divisão deve ser M1+, M1, M2+ ou M2.');
         return {
           demo: true,
           month: '2026-09',

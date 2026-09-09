@@ -5,7 +5,7 @@ export const defaultRules: PublicRules = {
   "sections": [
     {
       "title": "Participação e divisões",
-      "text": "A inscrição é por convite, com validação do WhatsApp e aprovação da organização. Existem três divisões: M1+, M1 e M2. Cada jogador indica se joga à esquerda ou à direita."
+      "text": "A inscrição é por convite, com validação do WhatsApp e aprovação da organização. Existem quatro divisões: M1+, M1, M2+ e M2. Cada jogador indica se joga à esquerda ou à direita."
     },
     {
       "title": "A ronda da semana",
@@ -25,7 +25,7 @@ export const defaultRules: PublicRules = {
     },
     {
       "title": "Campeões do mês",
-      "text": "Há três campeões: o jogador com mais pontos de M1+, o de M1 e o de M2, independentemente do lado. Em caso de empate, vence o mais velho. Depois de apurados os campeões, o novo mês começa com os pontos a zero e o histórico fica guardado."
+      "text": "Há quatro campeões: o jogador com mais pontos de M1+, o de M1, o de M2+ e o de M2, independentemente do lado. Em caso de empate, vence o mais velho. Depois de apurados os campeões, o novo mês começa com os pontos a zero e o histórico fica guardado."
     },
     {
       "title": "Registo de resultados",

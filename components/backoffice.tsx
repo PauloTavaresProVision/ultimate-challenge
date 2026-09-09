@@ -269,7 +269,7 @@ export default function Backoffice({
                   {
                     label: 'Jogadores ativos',
                     value: active.length,
-                    detail: '3 divisões · esquerda e direita',
+                    detail: '4 divisões · esquerda e direita',
                     Icon: Users,
                   },
                   {

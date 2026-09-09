@@ -155,7 +155,7 @@ function App() {
       <header className="auth-brand-header"><div className="ultimate-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div></header>
       <aside className="auth-brand" aria-label="Ultimate Challenge">
         <div className="auth-court" aria-hidden="true"><i /><b /></div>
-        <div className="auth-brand-caption"><span>PREMIER PADEL CLUB</span><strong>O teu próximo<br />desafio começa aqui.</strong><p>M1+ <span>·</span> M1 <span>·</span> M2</p></div>
+        <div className="auth-brand-caption"><span>PREMIER PADEL CLUB</span><strong>O teu próximo<br />desafio começa aqui.</strong><p>M1+ <span>·</span> M1 <span>·</span> M2+ <span>·</span> M2</p></div>
       </aside>
       <section className="panel auth-card">
         <div className="ultimate-logo auth-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div>
@@ -249,7 +249,7 @@ function App() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {['M1+', 'M1', 'M2'].map((x) => (
+                          {['M1+', 'M1', 'M2+', 'M2'].map((x) => (
                             <SelectItem key={x} value={x}>
                               {x}
                             </SelectItem>

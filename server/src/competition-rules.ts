@@ -4,12 +4,12 @@ export function movementPlan(players: Player[], games: Game[], cutoff: string) {
   const rank = rankings(players, games.filter(g => g.published && g.date < cutoff), addDays(cutoff,-1).slice(0,7));
   const changes: { id: string; name: string; side: string; from: string; to: string; points: number }[] = [];
   const used = new Set<string>();
-  for (let i=0;i<2;i++) for (const side of ['Esquerda','Direita']) {
+  for (let i=0;i<divisions.length-1;i++) for (const side of ['Esquerda','Direita']) {
     const upper = rank.filter(p => p.verified && p.division === divisions[i] && p.side === side);
     const lower = rank.filter(p => p.verified && p.division === divisions[i+1] && p.side === side);
     const down = upper.at(-1), up = lower[0];
     if (!up || !down) throw new Error(`Faltam jogadores ${side.toLowerCase()} para trocar entre ${divisions[i]} e ${divisions[i+1]}.`);
-    if (used.has(up.id) || used.has(down.id)) throw new Error('A divisão M1 precisa de dois jogadores de cada lado para haver subida e descida distintas.');
+    if (used.has(up.id) || used.has(down.id)) throw new Error(`As divisões intermédias precisam de dois jogadores de cada lado para haver subida e descida distintas (${divisions[i]} / ${divisions[i+1]}).`);
     for (const [p,to] of [[up,divisions[i]],[down,divisions[i+1]]] as const) {
       used.add(p.id); changes.push({id:p.id,name:p.name,side:p.side,from:p.division,to,points:p.points});
     }

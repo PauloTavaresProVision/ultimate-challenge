@@ -13,7 +13,7 @@ try{
  docker(['cp','server/src/welcome.ts',container+':/app/server/src/welcome.ts']);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],`
- import assert from 'node:assert/strict';import {queueWelcome,welcomeText} from './src/welcome.ts';import {db} from './src/db.ts';import {decrypt} from './src/security.ts';import {config} from './src/config.ts';
+ import assert from 'node:assert/strict';import {queueWelcome,welcomeText,retryWelcome} from './src/welcome.ts';import {db} from './src/db.ts';import {decrypt} from './src/security.ts';import {config} from './src/config.ts';
  try {
  const group='12345@g.us',jid='244900000001@s.whatsapp.net';
  await db.setting.create({data:{key:'whatsapp_group',value:group}});
@@ -25,6 +25,21 @@ try{
  assert.equal(await db.outbox.count(),1);await queueWelcome(group,[jid]);assert.equal(await db.outbox.count(),1);
  const row=await db.outbox.findFirst();assert.equal(row.recipient,group);assert.equal(row.kind,'welcome');
  const text=decrypt(row.encryptedBody,config.MESSAGE_KEY);assert(text.includes('M1'));assert(text.includes('direita'));assert(text.includes('/regras'));assert(!text.includes('18:00'));assert(!text.includes('primeiro jogo'));
+ await assert.rejects(retryWelcome(row.id)); // pending is never duplicated
+ await db.outbox.update({where:{id:row.id},data:{status:'uncertain'}});
+ await db.setting.update({where:{key:'whatsapp_group'},data:{value:'other@g.us'}});
+ await assert.rejects(retryWelcome(row.id));
+ await db.setting.update({where:{key:'whatsapp_group'},data:{value:group}});
+ await db.player.update({where:{id:player.id},data:{status:'Pendente'}});
+ await assert.rejects(retryWelcome(row.id));
+ await db.player.update({where:{id:player.id},data:{status:'Ativo'}});
+ const retries=await Promise.allSettled([retryWelcome(row.id),retryWelcome(row.id)]);
+ assert.equal(retries.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(await db.outbox.count(),1);
+ assert.equal((await db.outbox.findUnique({where:{id:row.id}})).status,'pending');
+ await db.outbox.update({where:{id:row.id},data:{status:'sent'}});
+ await assert.rejects(retryWelcome(row.id));
+ console.log('PASS: welcome retry checks active player and current group, serializes duplicate requests, rejects pending and sent messages. No messages sent.');
  console.log('PASS: approved players only, selected group only, phone identity, concurrent deduplication, persistent replay protection and welcome text. No messages sent.');
  }finally{await db.$disconnect();}
  `);console.log(output.trim());

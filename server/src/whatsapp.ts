@@ -412,8 +412,13 @@ export class WhatsApp {
     this.sending = true;
     try {
       if (!await this.canSend()) return;
+      const socket = this.socket!;
       const row = await claimDelivery();
       if (!row) return;
+      let attempted = false;
+      const ready = () => {
+        if (this.socket !== socket || this.status !== 'connected') throw new Error('Ligação interrompida antes do envio.');
+      };
       try {
         if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
@@ -426,19 +431,25 @@ export class WhatsApp {
           if(!player || player.status!=='Ativo' || !player.verified || currentGroup?.value!==payload.group) {
             await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
           }
-          const outcome=await joinApprovedPlayer(this.socket,payload.group,row.recipient);
+          ready();
+          attempted = true;
+          const outcome=await joinApprovedPlayer(socket,payload.group,row.recipient);
           if(outcome==='added')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite') {
-            const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
-            await this.socket.sendMessage(recipient,{text:payload.text});
+            const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
+            ready();
+            await socket.sendMessage(recipient,{text:payload.text});
           }
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;
         }
         if(row.kind==='invitation') await finishInvitation();
-        const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
+        const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
-        const result = await this.socket.sendMessage(recipient, row.kind === 'ai' ? decodeBotMessage(body) : {text:body});
+        const content = row.kind === 'ai' ? decodeBotMessage(body) : {text:body};
+        ready();
+        attempted = true;
+        const result = await socket.sendMessage(recipient, content);
         if(row.kind==='invitation') await finishInvitation();
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
         await db.setting.upsert({
@@ -456,7 +467,7 @@ export class WhatsApp {
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({
           where: { id: row.id },
-          data: { status: 'uncertain' },
+          data: { status: !attempted && (this.socket !== socket || this.status !== 'connected') ? 'pending' : 'uncertain' },
         });
       }
     } finally {

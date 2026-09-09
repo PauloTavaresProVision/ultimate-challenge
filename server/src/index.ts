@@ -1,4 +1,5 @@
 import { installAI } from './ai-bot.ts';
+import { retryWelcome } from './welcome.ts';
 import { installCalendar } from './calendar.ts';
 import { installRules } from './public-rules.ts';
 import { installSubstitutions, vacancies } from './substitutions.ts';
@@ -399,6 +400,12 @@ app.get('/api/admin/messages', auth, admin, async (_req, res) => {
 app.get('/api/admin/message-delivery', auth, admin, async (_req,res) => {
   const row=await db.setting.findUnique({where:{key:'message_delivery'}});
   res.json(row?JSON.parse(row.value):{mode:'immediate',hoursBefore:24});
+});
+app.post('/api/admin/messages/:id/retry-welcome', auth, admin, async (req,res) => {
+  const id=z.string().uuid().parse(req.params.id);
+  z.object({confirmNotReceived:z.literal(true)}).parse(req.body);
+  try { res.json(await retryWelcome(id)); }
+  catch(error) { fail(409,(error as Error).message); }
 });
 app.put('/api/admin/message-delivery', auth, admin, async (req,res) => {
   const setting=z.object({mode:z.enum(['immediate','scheduled']),hoursBefore:z.number().int().min(1).max(168)}).parse(req.body);

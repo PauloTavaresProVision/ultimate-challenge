@@ -2164,3 +2164,35 @@ h1 {
 .calendar-days .calendar-day-summary { color: #143b50; font-weight: 600; margin-top: 16px; }
 @media(max-width: 1100px) { .calendar-day-options { grid-template-columns: repeat(4,minmax(0,1fr)); } }
 @media(max-width: 480px) { .calendar-day-options { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+/* Compact invitation list: one row per contact, including after resending. */
+.invite-list { margin-top:24px; min-width:0; background:#fff; border:1px solid #e1e7e3; border-radius:16px; overflow:hidden; }
+.invite-list-header { padding:20px 24px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.invite-list-header h2 { font-size:16px; font-weight:600; white-space:nowrap; margin:0; }
+.invite-list-header h2 span { margin-left:8px; font-size:12px; padding:3px 8px; border-radius:20px; background:#f0f4f6; color:#657984; }
+.invite-list-tools { display:flex; gap:8px; }
+.invite-list-tools input { width:190px; height:36px; font-size:13px; }
+.invite-list-tools select { max-width:175px; height:36px; border:1px solid #dce3e7; border-radius:8px; padding:0 10px; background:white; font:inherit; font-size:13px; color:#365463; }
+.invite-list-scroll { overflow-x:auto; }
+.invite-list-table { width:100%; border-collapse:collapse; text-align:left; white-space:nowrap; font-size:13px; }
+.invite-list-table th { padding:10px 24px; font-size:11px; font-weight:600; color:#6b7e88; background:#f7f9fa; border-block:1px solid #edf1f3; }
+.invite-list-table td { height:52px; padding:8px 24px; border-bottom:1px solid #edf1f3; }
+.invite-list-table tr:last-child td { border-bottom:0; }
+.invite-list-table td:first-child { font-variant-numeric:tabular-nums; font-weight:500; color:#173e51; }
+.invite-list-table td:last-child { text-align:right; }
+.invite-list-table tbody tr:hover { background:#fafcfd; }
+.invite-state { color:#647680; }
+.invite-state[data-state="approved"],.invite-state[data-state="delivered"],.invite-state[data-state="read"] { color:#22734c; }
+.invite-state[data-state="failed"],.invite-state[data-state="rejected"] { color:#b54747; }
+.invite-state[data-state="pending"],.invite-state[data-state="verification"],.invite-state[data-state="registered"] { color:#936b25; }
+.invite-list-table .invite-list-empty { padding:32px 24px; text-align:center; color:#71838b; font-weight:400; }
+.invite-list-note { margin:0; padding:10px 24px; font-size:12px; color:#71838b; }
+.invite-list-pages { display:flex; justify-content:flex-end; align-items:center; gap:12px; border-top:1px solid #edf1f3; padding:8px 24px; font-size:12px; }
+.invite-list .form-error { padding:0 24px 12px; }
+@media(max-width:700px) {
+  .invite-list-header { align-items:stretch; flex-direction:column; gap:12px; padding:16px; }
+  .invite-list-tools input { width:100%; min-width:0; }
+  .invite-list-tools select { max-width:150px; }
+  .invite-list-table th,.invite-list-table td { padding-left:12px; padding-right:12px; }
+  .invite-list-table { font-size:12px; }
+}

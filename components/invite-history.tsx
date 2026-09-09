@@ -2,13 +2,51 @@ import {useEffect,useState,useRef} from 'react';
 import {api} from './whatsapp-live';
 import {Button} from './ui/button';
 import {Input} from './ui/input';
-type Item={id:string;phone:string;name:string|null;delivery:string;registration:string;createdAt:string;expiresAt:string;canResend:boolean};
-const registration:Record<string,string>={pending:'Aguarda inscrição',expired:'Convite expirado',verification:'Inscrito · falta validar número',registered:'Inscrito · aguarda aprovação',approved:'Inscrito · aprovado',rejected:'Inscrição rejeitada',inactive:'Jogador inativo'};
-const delivery:Record<string,string>={pending:'Em fila',sending:'A enviar',sent:'Envio sem confirmação de entrega',accepted:'Aceite pelo WhatsApp',delivered:'Entregue',read:'Lido',failed:'Recusado pelo WhatsApp',uncertain:'Entrega incerta',cancelled:'Cancelado',expired:'Envio expirado'};
+
+type Item={id:string;phone:string;name:string|null;delivery:string;registration:string;createdAt:string;canResend:boolean};
+const registrations:Record<string,string>={pending:'A aguardar',expired:'Expirado',verification:'Por validar',registered:'Por aprovar',approved:'Inscrito',rejected:'Rejeitado',inactive:'Inativo'};
+const deliveries:Record<string,string>={pending:'Em fila',sending:'A enviar',sent:'Enviado*',accepted:'Enviado*',delivered:'Entregue',read:'Lido',failed:'Falhou',uncertain:'Por confirmar',cancelled:'Cancelado',expired:'Expirado'};
+
 export default function InviteHistory({connected}:{connected:boolean}){
- const [data,setData]=useState<{items:Item[];total:number}>({items:[],total:0}),[offset,setOffset]=useState(0),[search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[busy,setBusy]=useState(''),[error,setError]=useState(''),[note,setNote]=useState('');
- const requests=useRef(new Map<string,string>());
- const refresh=()=>api<{items:Item[];total:number}>(`/admin/invite-history?offset=${offset}&search=${encodeURIComponent(search)}&filter=${filter}`).then(setData);
- useEffect(()=>{let active=true;const load=()=>api<{items:Item[];total:number}>(`/admin/invite-history?offset=${offset}&search=${encodeURIComponent(search)}&filter=${filter}`).then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});void load();const timer=setInterval(load,10000);return()=>{active=false;clearInterval(timer);};},[offset,search,filter]);
- return <section className="wa-card" style={{marginTop:24}}><header className="wa-card-heading"><div><h2>Histórico de convites</h2><p>Destinatários, entrega e inscrição · {data.total} envio(s)</p></div><Button variant="outline" onClick={()=>refresh().catch(e=>setError(e.message))}>Atualizar</Button></header><div style={{padding:24}}><Input aria-label="Pesquisar número" placeholder="Pesquisar por número" value={search} onChange={e=>{setSearch(e.target.value);setOffset(0);}}/><div className="message-filters">{[['all','Todos'],['pending','Aguardam inscrição'],['registered','Inscritos']].map(([id,label])=><Button key={id} variant={filter===id?'secondary':'ghost'} onClick={()=>{setFilter(id);setOffset(0);}}>{label}</Button>)}</div>{data.items.map(i=><div className="message-row" key={i.id}><div className="message-description"><strong>{i.name?`${i.name} · `:''}{i.phone}</strong><small>{new Date(i.createdAt).toLocaleString('pt-PT',{timeZone:'Africa/Luanda'})} · {delivery[i.delivery]??i.delivery}</small><span>{registration[i.registration]}</span></div><Button variant="outline" disabled={!connected||!!busy||!i.canResend} onClick={async()=>{setBusy(i.id);setError('');setNote('');const batchId=requests.current.get(i.id)??crypto.randomUUID();requests.current.set(i.id,batchId);try{await api('/admin/invite-deliveries','POST',{batchId,phones:[i.phone],message:'Olá! Reenviamos o teu convite para o Ultimate Challenge, no Premier Padel Club. Preenche a inscrição através deste link:'});requests.current.delete(i.id);setNote('Novo convite colocado na fila. O envio anterior continua no histórico.');await refresh();}catch(e){setError((e as Error).message);}finally{setBusy('');}}}>{busy===i.id?'A preparar…':'Reenviar'}</Button></div>)}{!data.items.length&&<p>Ainda não há convites neste histórico.</p>}<div className="dialog-actions"><Button variant="outline" disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>Anterior</Button><span>{data.total?offset+1:0}–{Math.min(offset+50,data.total)} de {data.total}</span><Button variant="outline" disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Seguinte</Button></div><p className="wa-footnote">O reenvio cria um novo link individual, válido por 7 dias. Inscrições existentes e envios em fila não são reenviados.</p>{error&&<p role="alert" className="form-error">{error}</p>}{note&&<p role="status">{note}</p>}</div></section>;
+  const [data,setData]=useState<{items:Item[];total:number}>({items:[],total:0});
+  const [offset,setOffset]=useState(0),[search,setSearch]=useState(''),[filter,setFilter]=useState('all');
+  const [busy,setBusy]=useState(''),[error,setError]=useState(''),[note,setNote]=useState(''),[loading,setLoading]=useState(true);
+  const requests=useRef(new Map<string,string>());
+  const url='/admin/invite-history?offset='+offset+'&search='+encodeURIComponent(search)+'&filter='+filter;
+  useEffect(()=>{
+    let active=true;setLoading(true);
+    const load=()=>api<typeof data>(url).then(d=>{if(active){setData(d);setError('');}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});
+    void load();const timer=setInterval(load,10000);
+    return()=>{active=false;clearInterval(timer);};
+  },[url]);
+  async function resend(item:Item){
+    setBusy(item.id);setError('');setNote('');
+    const batchId=requests.current.get(item.id)??crypto.randomUUID();requests.current.set(item.id,batchId);
+    try{
+      await api('/admin/invite-deliveries','POST',{batchId,phones:[item.phone],message:'Olá! Reenviamos o teu convite para o Ultimate Challenge, no Premier Padel Club. Preenche a inscrição através deste link:'});
+      requests.current.delete(item.id);setNote('Convite para '+item.phone+' colocado na fila.');
+      setData(await api<typeof data>(url));
+    }catch(e){setError((e as Error).message);}finally{setBusy('');}
+  }
+  return <section className="invite-list" aria-labelledby="invite-list-title">
+    <header className="invite-list-header"><h2 id="invite-list-title">Convites enviados <span>{data.total}</span></h2>
+      <div className="invite-list-tools">
+        <Input aria-label="Pesquisar contacto pelo número" placeholder="Pesquisar número…" value={search} onChange={e=>{setSearch(e.target.value);setOffset(0);}}/>
+        <select aria-label="Filtrar inscrições" value={filter} onChange={e=>{setFilter(e.target.value);setOffset(0);}}><option value="all">Todos</option><option value="pending">Aguardam inscrição</option><option value="registered">Com inscrição</option></select>
+      </div>
+    </header>
+    <div className="invite-list-scroll" tabIndex={0} role="region" aria-label="Lista de contactos convidados">
+      <table className="invite-list-table"><thead><tr><th>Contacto</th><th>Envio</th><th>Inscrição</th><th><span className="sr-only">Ações</span></th></tr></thead>
+        <tbody>{!loading&&data.items.map(item=><tr key={item.phone}>
+          <td title={item.name??item.phone}>{item.phone}</td>
+          <td><span className="invite-state" data-state={item.delivery} title={'Último envio: '+new Date(item.createdAt).toLocaleString('pt-PT',{timeZone:'Africa/Luanda'})}>{deliveries[item.delivery]??item.delivery}</span></td>
+          <td><span className="invite-state" data-state={item.registration}>{registrations[item.registration]??item.registration}</span></td>
+          <td><Button size="sm" variant="ghost" disabled={!connected||!!busy||!item.canResend} title={!item.canResend?'Já inscrito ou convite em fila':!connected?'Liga o WhatsApp para reenviar':'Enviar novo convite'} onClick={()=>void resend(item)}>{busy===item.id?'A enviar…':'Reenviar'}</Button></td>
+        </tr>)}{(loading||!data.items.length)&&<tr><td colSpan={4} className="invite-list-empty">{loading?'A carregar contactos…':search||filter!=='all'?'Nenhum contacto encontrado.':'Ainda não enviaste convites.'}</td></tr>}</tbody>
+      </table>
+    </div>
+    {data.items.some(i=>['sent','accepted'].includes(i.delivery))&&<p className="invite-list-note">* Entrega ainda não confirmada pelo WhatsApp.</p>}
+    {data.total>50&&<footer className="invite-list-pages"><span>{offset+1}–{Math.min(offset+50,data.total)} de {data.total}</span><Button variant="ghost" disabled={!offset} onClick={()=>setOffset(offset-50)}>Anterior</Button><Button variant="ghost" disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Seguinte</Button></footer>}
+    {error&&<p role="alert" className="form-error">{error}</p>}{note&&<p role="status" className="invite-list-note">{note}</p>}
+  </section>;
 }

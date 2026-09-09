@@ -37,7 +37,9 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
     const filter=z.enum(['all','pending','registered']).parse(req.query.filter??'all');
     const registered=filter==='all'?[]:(await db.player.findMany({select:{phone:true}})).map(p=>p.phone.slice(1)+'@s.whatsapp.net');
     const where={kind:'invitation',recipient:{...(search?{contains:search.replace(/[^0-9]/g,'')}:{}),...(filter==='registered'?{in:registered}:filter==='pending'?{notIn:registered}:{})}};
-    const [messages,total]=await Promise.all([db.outbox.findMany({where,orderBy:{createdAt:'desc'},skip:offset,take:50}),db.outbox.count({where})]);
+    const contacts=await db.outbox.findMany({where,distinct:['recipient'],orderBy:[{createdAt:'desc'},{id:'desc'}],select:{id:true}});
+    const total=contacts.length;
+    const messages=await db.outbox.findMany({where:{id:{in:contacts.slice(offset,offset+50).map(m=>m.id)}},orderBy:[{createdAt:'desc'},{id:'desc'}]});
     const items=await Promise.all(messages.map(async m=>{
       const phone='+'+m.recipient.split('@')[0];
       const player=await db.player.findUnique({where:{phone},select:{name:true,status:true,verified:true}});

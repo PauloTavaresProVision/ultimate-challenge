@@ -36,7 +36,7 @@ try{
  assert.equal((await request({...input,batchId:randomUUID()})).status,409);
  await db.outbox.updateMany({data:{status:'sent'}});
  const resend={batchId:randomUUID(),phones:['+244900000001'],message:'Reenvio'};
- assert.equal((await request(resend)).status,200);assert.equal((await history()).total,3);
+ assert.equal((await request(resend)).status,200);const afterResend=await history();assert.equal(afterResend.total,2);assert.equal(afterResend.items.filter(i=>i.phone===resend.phones[0]).length,1);
  await db.player.create({data:{name:'Jogador inscrito',phone:'+351900000002',birth:new Date('1990-01-01'),side:'Direita',division:'M1',verified:true,status:'Pendente'}});
  const registered=(await history()).items.find(i=>i.phone==='+351900000002');assert.equal(registered.registration,'registered');assert.equal(registered.canResend,false);
  assert.equal((await request({batchId:randomUUID(),phones:['+351900000002'],message:'Não reenviar'})).status,409);

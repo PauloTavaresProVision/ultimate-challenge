@@ -104,6 +104,18 @@ model Setting {
   key String @id
   value String
 }
+model WhatsAppAuthSession {
+  id String @id
+  status String
+  keys WhatsAppAuthKey[]
+}
+model WhatsAppAuthKey {
+  sessionId String
+  name String
+  value String
+  session WhatsAppAuthSession @relation(fields: [sessionId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  @@id([sessionId, name])
+}
 model RateLimit {
   key String @id
   count Int

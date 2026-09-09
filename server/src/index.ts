@@ -519,7 +519,6 @@ const cleanup = setInterval(() => {
 const server = app.listen(config.PORT, config.HOST, () =>
   console.log(`Escada disponível em ${config.APP_ORIGIN}`),
 );
-if (config.WA_AUTO_CONNECT === 'true') await wa.connect();
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => {
     clearInterval(timer);
@@ -535,3 +534,5 @@ for (const signal of ['SIGTERM', 'SIGINT'])
         ),
       );
   });
+
+if (config.WA_AUTO_CONNECT === 'true') await wa.connect();

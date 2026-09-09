@@ -1,4 +1,5 @@
-import {loadWhatsAppAuth} from './whatsapp-auth.ts';
+import {loadPostgresAuth} from './whatsapp-postgres-auth.ts';
+import {closeDiagnostic} from './whatsapp-close-diagnostic.ts';
 import {claimDelivery,finishInvitation} from './delivery-queue.ts';
 import { handleAI, botEnabled } from './ai-bot.ts';
 import { SendGate } from './whatsapp-send-gate.ts';
@@ -16,8 +17,6 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import { mkdir, readdir, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { config } from './config.ts';
 import { db } from './db.ts';
 import { decrypt, phoneFromJid } from './security.ts';
@@ -34,7 +33,7 @@ export class WhatsApp {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private enabled = false;
   private stopping = false;
-  private auth: Awaited<ReturnType<typeof loadWhatsAppAuth>> | null = null;
+  private auth: Awaited<ReturnType<typeof loadPostgresAuth>> | null = null;
   private opening: Promise<void> | null = null;
   private generation = 0;
   private failures = 0;
@@ -128,44 +127,34 @@ export class WhatsApp {
   async connect() {
     if (this.enabled || this.stopping) return;
     this.enabled = true;
-    const generation=this.generation;
-    try {
-      await mkdir(config.WA_AUTH_DIR,{recursive:true,mode:0o700});
-      const files=await readdir(config.WA_AUTH_DIR);
-      if(!this.enabled||generation!==this.generation)return;
-      if(this.status==='logged_out'||files.includes('.requires-qr'))await this.archiveSession();
-      if(!this.enabled||generation!==this.generation)return;
-      this.failures=0;
-      await this.open();
-    } catch {
-      if(!this.enabled||generation!==this.generation)return;
-      this.enabled=false;this.status='error';
-      this.lastError='Não foi possível preparar a sessão. Os ficheiros foram preservados.';
-    }
+    this.failures=0;
+    await this.open();
   }
   private open():Promise<void> {
     if(this.opening)return this.opening;
     this.opening=this.openSocket().finally(()=>{this.opening=null;});
     return this.opening;
   }
-  private async archiveSession() {
-    await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
-    const entries = await readdir(config.WA_AUTH_DIR, { withFileTypes: true });
-    const files = entries.filter(entry => entry.isFile() && (entry.name.endsWith('.json') || entry.name === '.requires-qr'));
-    if (!files.length) return;
-    const backup = join(config.WA_AUTH_DIR, 'backups', `${Date.now()}`);
-    await mkdir(backup, { recursive: true, mode: 0o700 });
-    for (const file of files) await rename(join(config.WA_AUTH_DIR, file.name), join(backup, file.name));
-  }
   private async openSocket() {
     if(!this.enabled)return;
     const generation = ++this.generation;
+    const openedAt=Date.now();
     this.status = 'connecting';
     try {
-      await mkdir(config.WA_AUTH_DIR, { recursive: true, mode: 0o700 });
-      const auth = await loadWhatsAppAuth(
-        config.WA_AUTH_DIR,
-      );
+      const auth = await loadPostgresAuth({
+        connectionString:config.DATABASE_URL, encryptionKey:config.MESSAGE_KEY,
+        folder:config.WA_AUTH_DIR,
+        onFailure:()=>{
+          if(generation!==this.generation)return;
+          this.enabled=false;this.generation++;
+          const socket=this.socket;this.socket=null;socket?.end(undefined);
+          this.qr=null;this.status='error';
+          this.lastError='A persistência da sessão ficou indisponível. A ligação foi parada para proteger as credenciais.';
+          const previous=this.auth;this.auth=null;
+          void previous?.close().catch(()=>{});
+          console.error('WhatsApp: persistência PostgreSQL interrompida; socket encerrado.');
+        }
+      });
       if (!this.enabled || generation !== this.generation) { await auth.close(); return; }
       this.auth = auth;
       const {state, saveCreds} = auth;
@@ -203,7 +192,7 @@ export class WhatsApp {
           if(generation!==this.generation)return;
           this.enabled=false;this.generation++;this.socket=null;sock.end(undefined);
           this.status = 'error';
-          this.lastError = 'Não foi possível guardar a sessão WhatsApp. Verifica as permissões e o espaço em disco.';
+          this.lastError = 'Não foi possível guardar a sessão WhatsApp. Verifica a ligação ao PostgreSQL.';
           console.error('WhatsApp: falha ao guardar credenciais.');
         });
       });
@@ -226,13 +215,22 @@ export class WhatsApp {
           void this.diagnose(sock).catch(()=>console.error('WhatsApp diagnóstico: não foi possível concluir a consulta.'));
         }
         if (update.connection === 'close') {
+          console.warn('WhatsApp sessão:',JSON.stringify(closeDiagnostic(update.lastDisconnect?.error,this.status,openedAt)));
           this.qr = null;
           this.socket = null;
           const closedGeneration = ++this.generation;
           if (this.timer) clearTimeout(this.timer);
           this.timer = null;
           sock.end(undefined);
-          try { await auth.close(); } catch {
+          const code = (
+            update.lastDisconnect?.error as { output?: { statusCode?: number } }
+          )?.output?.statusCode;
+          const policy = disconnectPolicy(code);
+          try {
+            if(policy.invalidate)await auth.revoke();
+            await auth.close();
+          } catch {
+            await auth.close().catch(()=>{});
             if (closedGeneration !== this.generation) return;
             this.enabled = false;
             this.status = 'error';
@@ -241,25 +239,23 @@ export class WhatsApp {
           }
           if (closedGeneration !== this.generation) return;
           this.auth = null;
-          const code = (
-            update.lastDisconnect?.error as { output?: { statusCode?: number } }
-          )?.output?.statusCode;
-          const policy = disconnectPolicy(code);
           this.lastError = policy.message;
           console.warn('WhatsApp desligado:', code ?? 'sem código', policy.message);
           if (policy.stop) {
-            if (policy.invalidate) await writeFile(join(config.WA_AUTH_DIR, '.requires-qr'), 'Session rejected; pair again.', {mode:0o600}).catch(()=>{});
             this.status = policy.invalidate ? 'logged_out' : 'error';
             this.enabled = false;
             return;
           }
           this.status = 'disconnected';
-          if (this.enabled && this.failures++ < 8)
+          // Paired sessions keep recovering from transport outages; an expired
+          // QR must not cause an endless cycle of unauthenticated sockets.
+          if (this.enabled && (auth.state.creds.registered || this.failures < 8)) {
+            this.failures=Math.min(this.failures+1,8);
             this.timer = setTimeout(
               () => {this.timer=null;if(this.enabled&&closedGeneration===this.generation)void this.open();},
               Math.min(60000, 2000 * 2 ** this.failures),
             );
-          else {
+          } else {
             this.enabled = false;
             this.status = 'error';
           }

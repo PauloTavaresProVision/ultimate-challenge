@@ -1,4 +1,5 @@
 import {openWebWhatsApp} from './whatsapp-web.ts';
+import {automaticPaused,DeliveryPaused} from './whatsapp-pause.ts';
 import type {MessagingSocket,WhatsAppEngine} from './whatsapp-transport.ts';
 import {loadPostgresAuth} from './whatsapp-postgres-auth.ts';
 import {closeDiagnostic} from './whatsapp-close-diagnostic.ts';
@@ -435,6 +436,7 @@ export class WhatsApp {
     sender: string,
     alternate: string | null,
   ) {
+    if(await automaticPaused())return;
     const group = await db.setting.findUnique({
       where: { key: 'whatsapp_group' },
     });
@@ -468,6 +470,7 @@ export class WhatsApp {
       orderBy: [{ date: 'asc' }, { time: 'asc' }],
       include: { court: true },
     });
+    if(await automaticPaused())return;
     await this.socket.sendMessage(chat, {
       mentions: [`${phone.slice(1)}@s.whatsapp.net`],
       text: `@${phone.slice(1)} ${player.name} · ${player.division} · ${player.side}\n${game ? `Próximo jogo: ${game.date}, ${game.time}, ${game.court.name}.` : 'Ainda não tens um jogo publicado.'}\n${config.APP_ORIGIN}/jogos`,
@@ -482,7 +485,8 @@ export class WhatsApp {
       const row = await claimDelivery();
       if (!row) return;
       let attempted = false;
-      const ready = () => {
+      const ready = async () => {
+        if(await automaticPaused())throw new DeliveryPaused('Envios automáticos pausados.');
         if (this.socket !== socket || this.status !== 'connected') throw new Error('Ligação interrompida antes do envio.');
       };
       try {
@@ -497,13 +501,13 @@ export class WhatsApp {
           if(!player || player.status!=='Ativo' || !player.verified || currentGroup?.value!==payload.group) {
             await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
           }
-          ready();
+          await ready();
           attempted = true;
           const outcome=await joinApprovedPlayer(socket,payload.group,row.recipient);
           if(outcome==='added'||outcome==='already_member')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite') {
             const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
-            ready();
+            await ready();
             await socket.sendMessage(recipient,{text:payload.text});
           }
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
@@ -513,7 +517,7 @@ export class WhatsApp {
         const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
         const content = row.kind === 'ai' ? decodeBotMessage(body) : {text:body};
-        ready();
+        await ready();
         attempted = true;
         const result = await socket.sendMessage(recipient, content);
         if(row.kind==='invitation') await finishInvitation();
@@ -533,7 +537,7 @@ export class WhatsApp {
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({
           where: { id: row.id },
-          data: { status: !attempted && (this.socket !== socket || this.status !== 'connected') ? 'pending' : 'uncertain' },
+          data: { status: !attempted && (error instanceof DeliveryPaused || this.socket !== socket || this.status !== 'connected') ? 'pending' : 'uncertain' },
         });
       }
     } finally {

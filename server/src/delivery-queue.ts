@@ -1,9 +1,11 @@
 import {db} from './db.ts';
+import {pauseKey} from './whatsapp-pause.ts';
 export const invitationIntervalMs=30000;
 const key='invitation-next-send';
 export async function claimDelivery(now=new Date()){
  return db.$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('invitation-delivery'))`;
+  if((await tx.setting.findUnique({where:{key:pauseKey}}))?.value==='true')return null;
   const state=await tx.setting.findUnique({where:{key}});
   const inFlight=await tx.outbox.count({where:{kind:'invitation',status:'sending'}});
   const paused=!!inFlight||!!state&&Number(state.value)>now.getTime();

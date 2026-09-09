@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { WhatsApp } from './whatsapp.ts';
+import {automaticPaused,setAutomaticPaused} from './whatsapp-pause.ts';
 import { resultWinner } from './game-results.ts';
 import { runCompetition } from './competition.ts';
 import {
@@ -346,9 +347,13 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
     where: { key: 'whatsapp_group' },
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
-  res.json({ engine:wa.engine, status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
+  res.json({ automaticPaused:await automaticPaused(), engine:wa.engine, status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
     groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
+});
+app.post('/api/admin/whatsapp/pause', auth, admin, async (req,res)=>{
+  const {paused}=z.object({paused:z.boolean()}).parse(req.body);
+  await setAutomaticPaused(paused);res.json({automaticPaused:paused});
 });
 app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
   const { phone, message } = z.object({

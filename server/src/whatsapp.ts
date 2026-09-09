@@ -1,4 +1,5 @@
 import {openWebWhatsApp} from './whatsapp-web.ts';
+import {openZApi} from './whatsapp-zapi.ts';
 import {automaticPaused,DeliveryPaused} from './whatsapp-pause.ts';
 import type {MessagingSocket,WhatsAppEngine} from './whatsapp-transport.ts';
 import {loadPostgresAuth} from './whatsapp-postgres-auth.ts';
@@ -30,7 +31,7 @@ export class WhatsApp {
   private gate = new SendGate();
   engine:WhatsAppEngine='baileys';
   private changing=false;
-  async initialize(){this.engine=(await db.setting.findUnique({where:{key:'whatsapp_engine'}}))?.value==='webjs'?'webjs':'baileys';}
+  async initialize(){const value=(await db.setting.findUnique({where:{key:'whatsapp_engine'}}))?.value;this.engine=value==='webjs'||value==='zapi'?value:'baileys';}
   async selectEngine(engine:WhatsAppEngine){
     if(this.changing)throw new Error('Troca em curso.');
     this.changing=true;
@@ -40,11 +41,11 @@ export class WhatsApp {
       this.engine=engine;this.lastError=null;
     } finally {this.changing=false;}
   }
-  get sendingPausedReason() { return this.engine==='webjs'?null:this.gate.reason; }
+  get sendingPausedReason() { return this.engine!=='baileys'?null:this.gate.reason; }
   private async canSend() {
     const sock = this.socket;
     if (!sock || this.status !== 'connected') return false;
-    if(this.engine==='webjs')return true;
+    if(this.engine!=='baileys')return true;
     return await this.gate.allowed(() => (sock as WASocket).fetchAccountReachoutTimelock()) && this.socket === sock && this.status === 'connected';
   }
   private socket: MessagingSocket | null = null;
@@ -184,7 +185,7 @@ export class WhatsApp {
   }
   private open():Promise<void> {
     if(this.opening)return this.opening;
-    this.opening=(this.engine==='webjs'?this.openWeb():this.openSocket()).finally(()=>{this.opening=null;});
+    this.opening=(this.engine!=='baileys'?this.openWeb():this.openSocket()).finally(()=>{this.opening=null;});
     return this.opening;
   }
   private async openSocket() {
@@ -386,8 +387,8 @@ export class WhatsApp {
     let qrRevision=0;
     this.status='connecting';this.lastError=null;
     try {
-      const sock=await this.webFactory({databaseUrl:config.DATABASE_URL,folder:config.WA_WEB_AUTH_DIR,executablePath:config.WA_WEB_EXECUTABLE,
-        qr:qr=>{const revision=++qrRevision;void QRCode.toDataURL(qr).then(data=>{if(revision===qrRevision&&generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
+      const sock=await (this.engine==='zapi'?openZApi:this.webFactory)({databaseUrl:config.DATABASE_URL,folder:config.WA_WEB_AUTH_DIR,executablePath:config.WA_WEB_EXECUTABLE,
+        qr:qr=>{const revision=++qrRevision;void (this.engine==='zapi'?Promise.resolve(qr):QRCode.toDataURL(qr)).then(data=>{if(revision===qrRevision&&generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
         authenticated:()=>{if(generation!==this.generation)return;qrRevision++;this.qr=null;this.status='syncing';},
         ready:()=>{if(generation!==this.generation)return;qrRevision++;this.status='connected';this.qr=null;this.lastError=null;this.failures=0;this.connectedAt=new Date().toISOString();void this.reconcileWelcomes().catch(()=>{});},
         closed:(revoked,startupError)=>{if(generation!==this.generation)return;
@@ -408,7 +409,7 @@ export class WhatsApp {
       });
       if(generation!==this.generation||!this.enabled){await sock.end();return;}
       this.socket=sock;
-    }catch{if(generation===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível iniciar o WhatsApp Web. Verifica o navegador e se já existe outra ligação ativa.';}}
+    }catch{if(generation===this.generation){this.enabled=false;this.status='error';this.lastError=this.engine==='zapi'?'Não foi possível iniciar a Z-API. Verifica as credenciais, o domínio HTTPS e se já existe outra ligação ativa.':'Não foi possível iniciar o WhatsApp Web. Verifica o navegador e se já existe outra ligação ativa.';}}
   }
   async disconnect() {
     this.stopping = true;

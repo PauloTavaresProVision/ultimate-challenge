@@ -5,7 +5,7 @@ import {Input} from './ui/input';
 
 type Item={id:string;phone:string;name:string|null;delivery:string;registration:string;createdAt:string;canResend:boolean};
 const registrations:Record<string,string>={pending:'A aguardar',expired:'Expirado',verification:'Por validar',registered:'Por aprovar',approved:'Inscrito',rejected:'Rejeitado',inactive:'Inativo'};
-const deliveries:Record<string,string>={pending:'Em fila',sending:'A enviar',sent:'Enviado*',accepted:'Enviado*',delivered:'Entregue',read:'Lido',failed:'Falhou',uncertain:'Por confirmar',cancelled:'Cancelado',expired:'Expirado'};
+const deliveries:Record<string,string>={pending:'Em fila',sending:'A enviar',provider_queued:'Em fila na Z-API',sent:'Enviado*',accepted:'Enviado*',delivered:'Entregue',read:'Lido',failed:'Falhou',uncertain:'Por confirmar',cancelled:'Cancelado',expired:'Expirado'};
 
 export default function InviteHistory({connected}:{connected:boolean}){
   const [data,setData]=useState<{items:Item[];total:number}>({items:[],total:0});

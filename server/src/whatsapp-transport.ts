@@ -1,4 +1,4 @@
-export type WhatsAppEngine='baileys'|'webjs';
+export type WhatsAppEngine='baileys'|'webjs'|'zapi';
 export type GroupInfo={id:string;subject:string;participants:Array<{id:string;phoneNumber?:string}>};
 export interface MessagingSocket {
   user?: {id:string;name?:string};

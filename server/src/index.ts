@@ -1,4 +1,6 @@
 import { installAI } from './ai-bot.ts';
+import {deliveryStatus} from './delivery-status.ts';
+import {installZSettings,installZWebhook} from './zapi-settings.ts';
 import { retryWelcome } from './welcome.ts';
 import { installCalendar } from './calendar.ts';
 import { installRules } from './public-rules.ts';
@@ -47,6 +49,7 @@ app.use(
   }),
 );
 app.use(express.json({ limit: '256kb' }));
+installZWebhook(app);
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin)
@@ -378,12 +381,13 @@ app.get('/api/admin/whatsapp/test/:id',auth,admin,async(req,res)=>{
   const receipt=mapping?await db.setting.findUnique({where:{key:'wa-receipt:'+mapping.value}}):null;
   const code=receipt?Number(receipt.value):null;
   const stored=row.status==='sending'&&Date.now()-row.createdAt.getTime()>120000?'uncertain':row.status;
-  const status=code===0?'failed':code!==null&&code>=4?'read':code===3?'delivered':code===2?'accepted':stored;
+  const status=await deliveryStatus(id,stored);
   const diagnostic=await db.setting.findUnique({where:{key:'outbox-diagnostic:'+id}});
   res.json({id,status,sentAt:row.sentAt,recipient:row.recipient.split('@')[0],hasMessageId:!!mapping,hasDiagnostic:!!diagnostic});
 });
+installZSettings(app,auth,admin,()=>wa.engine==='zapi'&&wa.status!=='disconnected'&&wa.status!=='error');
 app.post('/api/admin/whatsapp/engine', auth, admin, async (req,res)=>{
-  const {engine}=z.object({engine:z.enum(['baileys','webjs'])}).parse(req.body);
+  const {engine}=z.object({engine:z.enum(['baileys','webjs','zapi'])}).parse(req.body);
   await wa.selectEngine(engine);res.json({engine:wa.engine,status:wa.status});
 });
 app.post('/api/admin/whatsapp/connect', auth, admin, async (_req, res) => {
@@ -403,8 +407,7 @@ app.post('/api/admin/whatsapp/group', auth, admin, async (req, res) => {
   res.json({ ok: true });
 });
 app.get('/api/admin/messages', auth, admin, async (_req, res) => {
-  res.json(
-    await db.outbox.findMany({
+  const rows=await db.outbox.findMany({
       select: {
         id: true,
         recipient: true,
@@ -418,8 +421,8 @@ app.get('/api/admin/messages', auth, admin, async (_req, res) => {
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
-    }),
-  );
+    });
+  res.json(await Promise.all(rows.map(async row=>({...row,status:await deliveryStatus(row.id,row.status)}))));
 });
 app.get('/api/admin/message-delivery', auth, admin, async (_req,res) => {
   const row=await db.setting.findUnique({where:{key:'message_delivery'}});

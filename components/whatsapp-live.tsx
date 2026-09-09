@@ -1,4 +1,5 @@
 import InviteDialog from './invite-dialog';
+import ZApiSettings from './zapi-settings';
 import InviteHistory from './invite-history';
 import MessageCenter from './message-center';
 import { useEffect, useState } from 'react';
@@ -29,7 +30,7 @@ export async function api<T = any>(
   return data;
 }
 type Group = { id: string; name: string };
-type Connection = { automaticPaused?: boolean; engine?: "baileys" | "webjs"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
+type Connection = { automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
@@ -54,7 +55,7 @@ export default function WhatsAppLive() {
       try{
         const result=await api<{status:string;recipient?:string;hasMessageId?:boolean}>(`/admin/whatsapp/test/${testId}`);
         if(!active)return;
-        const labels:Record<string,string>={sending:'A enviar…',sent:'Enviado ao WhatsApp. A aguardar confirmação de entrega.',accepted:'Aceite pelo WhatsApp. A aguardar entrega.',delivered:'Entregue ao destinatário.',read:'Lido pelo destinatário.',failed:'O WhatsApp rejeitou o envio.',uncertain:'O envio ficou sem confirmação. Continuamos a consultar os recibos; não será repetido automaticamente.',not_found:'O servidor ainda não registou este teste. Podes tentar novamente: será usado o mesmo identificador.'};
+        const labels:Record<string,string>={sending:'A enviar…',provider_queued:'Em fila na Z-API',sent:'Enviado ao WhatsApp. A aguardar confirmação de entrega.',accepted:'Aceite pelo WhatsApp. A aguardar entrega.',delivered:'Entregue ao destinatário.',read:'Lido pelo destinatário.',failed:'O WhatsApp rejeitou o envio.',uncertain:'O envio ficou sem confirmação. Continuamos a consultar os recibos; não será repetido automaticamente.',not_found:'O servidor ainda não registou este teste. Podes tentar novamente: será usado o mesmo identificador.'};
         if(result.status==='uncertain'&&!result.hasMessageId)labels.uncertain='O WhatsApp não devolveu o identificador da mensagem. Não conseguimos verificar a entrega deste teste; não foi reenviado.';
         setTestError('');setTestResult(`${result.recipient?'+'+result.recipient+' · ':''}${labels[result.status]??'A consultar envio…'}`);
       }catch{if(active)setTestError('Sem ligação ao servidor. A recuperar o estado deste envio automaticamente.');}
@@ -63,7 +64,7 @@ export default function WhatsAppLive() {
     return()=>{active=false;clearInterval(timer);};
   },[testId]);
   const connected = state.status === 'connected';
-  const engineLabel = state.engine === 'webjs' ? 'WhatsApp Web' : state.engine === 'baileys' ? 'Baileys' : 'A verificar';
+  const engineLabel = state.engine === 'zapi' ? 'Z-API' : state.engine === 'webjs' ? 'WhatsApp Web' : state.engine === 'baileys' ? 'Baileys' : 'A verificar';
   const statusLabel = ({ loading: 'A verificar', connected: 'Ligado', connecting: 'A ligar', syncing: 'Associado. A concluir ligação…', qr: 'Aguardar leitura do QR', disconnected: 'Desligado', logged_out: 'Sessão terminada', error: 'Erro de ligação' } as Record<string, string>)[state.status] ?? state.status;
   async function refresh() { setState(await api<Connection>('/admin/whatsapp')); }
   useEffect(() => {
@@ -104,11 +105,12 @@ export default function WhatsAppLive() {
         <select id="wa-engine" className="wa-group-input" value={state.engine ?? 'baileys'} disabled={!!busy || state.status==='loading'} onChange={async e=>{
           if(await action('/admin/whatsapp/engine',{engine:e.target.value})){setGroups([]);setSelected(null);setGroupsLoaded(false);setTestResult('');}
         }} style={{width:'100%',padding:'12px 14px',border:'1px solid #dce4e8',borderRadius:10,background:'white',font:'inherit'}}>
-          <option value="baileys">Baileys</option><option value="webjs">WhatsApp Web · whatsapp-web.js</option>
+          <option value="baileys">Baileys</option><option value="webjs">WhatsApp Web · whatsapp-web.js</option><option value="zapi">Z-API</option>
         </select>
         <small>Ao mudar, a ligação atual é encerrada e a fila fica em espera. Depois carrega em Ligar por QR.</small>
       </div>
     </section>
+    {state.engine==='zapi'&&<ZApiSettings/>}
     <section className="wa-connection">
       <div className="wa-account">
         <div className="wa-account-icon"><MessageCircle size={27} /></div>

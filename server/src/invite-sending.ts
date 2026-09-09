@@ -1,4 +1,5 @@
 import type { Express, RequestHandler } from 'express';
+import {deliveryStatus} from './delivery-status.ts';
 import { z } from 'zod';
 import { db } from './db.ts';
 import { config } from './config.ts';
@@ -46,7 +47,7 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
       const message=await db.setting.findUnique({where:{key:'outbox-message:'+m.id}});
       const receipt=message?await db.setting.findUnique({where:{key:'wa-receipt:'+message.value}}):null;
       const code=receipt?Number(receipt.value):null;
-      const status=m.status==='sent'&&code!==null?(code>=4?'read':code===3?'delivered':code===2?'accepted':code===0?'failed':m.status):m.status;
+      const status=await deliveryStatus(m.id,m.status);
       return {id:m.id,phone,name:player?.name??null,delivery:status,registration:player?(player.status==='Ativo'?'approved':player.status==='Rejeitado'?'rejected':!player.verified?'verification':player.status==='Inativo'?'inactive':'registered'):(m.expiresAt<new Date()?'expired':'pending'),createdAt:m.createdAt,expiresAt:m.expiresAt,canResend:!player&&(!['pending','sending'].includes(m.status)||m.expiresAt<new Date())};
     }));
     res.set('Cache-Control','no-store').json({items,total,offset});
@@ -73,6 +74,7 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
           status = code >= 4 ? 'read' : code === 3 ? 'delivered' : code === 2 ? 'accepted' : code === 0 ? 'failed' : status;
         }
       }
+      status=await deliveryStatus(r.id,status);
       const failure = message && status === 'failed' ? await db.setting.findUnique({where:{key:'wa-receipt-error:'+message.value}}) : null;
       return {...r,status,errorCode:failure?.value??null};
     }));

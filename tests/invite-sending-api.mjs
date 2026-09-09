@@ -11,9 +11,11 @@ try{
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','escada-app','300']);containerCreated=true;
  docker(['cp','server/src/invite-sending.ts',container+':/app/server/src/invite-sending.ts']);
+ docker(['cp','server/src/delivery-queue.ts',container+':/app/server/src/delivery-queue.ts']);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],`
  import express from 'express';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
+ import {claimDelivery,finishInvitation} from './src/delivery-queue.ts';
  import {installInviteSending} from './src/invite-sending.ts';import {db} from './src/db.ts';import {decrypt} from './src/security.ts';import {config} from './src/config.ts';
  const app=express();app.use(express.json());let connected=true;
  installInviteSending(app,(q,r,n)=>q.headers.authorization==='test'?n():r.sendStatus(401),(q,r,n)=>n(),()=>connected);
@@ -40,7 +42,27 @@ try{
  await db.player.create({data:{name:'Jogador inscrito',phone:'+351900000002',birth:new Date('1990-01-01'),side:'Direita',division:'M1',verified:true,status:'Pendente'}});
  const registered=(await history()).items.find(i=>i.phone==='+351900000002');assert.equal(registered.registration,'registered');assert.equal(registered.canResend,false);
  assert.equal((await request({batchId:randomUUID(),phones:['+351900000002'],message:'Não reenviar'})).status,409);
- console.log('PASS: validation, connection guard, duplicate recipients, concurrent idempotency, individual encrypted links, phone binding and status. No messages sent.');
+ const cancel=id=>fetch('http://127.0.0.1:3200/api/admin/invite-deliveries/'+id+'/cancel',{method:'POST',headers:{Authorization:'test'}});
+ const pending=await db.outbox.findFirst({where:{status:'pending'}});
+ assert.equal((await cancel(pending.id)).status,200);assert.equal((await cancel(pending.id)).status,409);
+ const now=new Date();
+ const rowData={recipient:'244900000009@s.whatsapp.net',kind:'invitation',encryptedBody:'test',expiresAt:new Date(now.getTime()+86400000),nextAttemptAt:now};
+ const q1=await db.outbox.create({data:rowData});const q2=await db.outbox.create({data:rowData});
+ const claimed=await Promise.all([claimDelivery(now),claimDelivery(now)]);
+ assert.equal(claimed.filter(Boolean).length,1);
+ const first=claimed.find(Boolean);
+ assert.equal((await cancel(first.id)).status,409);
+ assert.equal(await claimDelivery(new Date(now.getTime()+60000)),null); // In flight: no parallel invitation.
+ await finishInvitation(new Date(now.getTime()+5000));
+ await db.outbox.update({where:{id:first.id},data:{status:'sent'}});
+ assert.equal(await claimDelivery(new Date(now.getTime()+34999)),null);
+ const otp=await db.outbox.create({data:{...rowData,kind:'verification'}});
+ assert.equal((await claimDelivery(new Date(now.getTime()+10000))).id,otp.id); // OTP is not blocked behind invitations.
+ const second=await claimDelivery(new Date(now.getTime()+35000));assert(second);assert.notEqual(second.id,first.id);
+ await finishInvitation(new Date(now.getTime()+120000));await db.outbox.update({where:{id:second.id},data:{status:'sent'}});
+ await db.outbox.create({data:rowData});
+ assert.equal(await claimDelivery(new Date(now.getTime()+149999)),null);
+ assert.equal((await claimDelivery(new Date(now.getTime()+150000))).kind,'invitation'); console.log('PASS: validation, connection guard, duplicate recipients, concurrent idempotency, individual encrypted links, phone binding and status. No messages sent.');
  }finally{server.close();await db.$disconnect();}
  `);console.log(output.trim());
 }finally{if(containerCreated)docker(['rm','-f',container]);if(dbCreated)docker(['exec','escada-database-1','dropdb','-U','escada',database]);}

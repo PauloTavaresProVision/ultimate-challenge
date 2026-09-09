@@ -35,13 +35,14 @@ export default function InviteHistory({connected}:{connected:boolean}){
         <select aria-label="Filtrar inscrições" value={filter} onChange={e=>{setFilter(e.target.value);setOffset(0);}}><option value="all">Todos</option><option value="pending">Aguardam inscrição</option><option value="registered">Com inscrição</option></select>
       </div>
     </header>
+    <p className="invite-list-note">Os convites e reenvios saem um de cada vez, com pelo menos 30 segundos de intervalo. A fila pausa se o WhatsApp não puder enviar.</p>
     <div className="invite-list-scroll" tabIndex={0} role="region" aria-label="Lista de contactos convidados">
       <table className="invite-list-table"><thead><tr><th>Contacto</th><th>Envio</th><th>Inscrição</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>{!loading&&data.items.map(item=><tr key={item.phone}>
           <td title={item.name??item.phone}>{item.phone}</td>
           <td><span className="invite-state" data-state={item.delivery} title={'Último envio: '+new Date(item.createdAt).toLocaleString('pt-PT',{timeZone:'Africa/Luanda'})}>{deliveries[item.delivery]??item.delivery}</span></td>
           <td><span className="invite-state" data-state={item.registration}>{registrations[item.registration]??item.registration}</span></td>
-          <td><Button size="sm" variant="ghost" disabled={!connected||!!busy||!item.canResend} title={!item.canResend?'Já inscrito ou convite em fila':!connected?'Liga o WhatsApp para reenviar':'Enviar novo convite'} onClick={()=>void resend(item)}>{busy===item.id?'A enviar…':'Reenviar'}</Button></td>
+          <td>{item.delivery==="pending"?<Button size="sm" variant="ghost" disabled={!!busy} onClick={async()=>{setBusy(item.id);setError("");try{await api("/admin/invite-deliveries/"+item.id+"/cancel","POST");setData(await api<typeof data>(url));setNote("Convite cancelado.");}catch(e){setError((e as Error).message);}finally{setBusy("");}}}>Cancelar</Button>:<Button size="sm" variant="ghost" disabled={!connected||!!busy||!item.canResend} title={!item.canResend?'Já inscrito ou convite em fila':!connected?'Liga o WhatsApp para reenviar':'Enviar novo convite'} onClick={()=>void resend(item)}>{busy===item.id?'A enviar…':'Reenviar'}</Button>}</td>
         </tr>)}{(loading||!data.items.length)&&<tr><td colSpan={4} className="invite-list-empty">{loading?'A carregar contactos…':search||filter!=='all'?'Nenhum contacto encontrado.':'Ainda não enviaste convites.'}</td></tr>}</tbody>
       </table>
     </div>

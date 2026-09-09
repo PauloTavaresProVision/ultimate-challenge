@@ -1,3 +1,4 @@
+import {claimDelivery,finishInvitation} from './delivery-queue.ts';
 import { handleAI, botEnabled } from './ai-bot.ts';
 import { SendGate } from './whatsapp-send-gate.ts';
 import { decodeBotMessage } from './bot-message.ts';
@@ -368,20 +369,8 @@ export class WhatsApp {
     this.sending = true;
     try {
       if (!await this.canSend()) return;
-      const row = await db.outbox.findFirst({
-        where: {
-          status: 'pending',
-          expiresAt: { gt: new Date() },
-          nextAttemptAt: { lte: new Date() },
-        },
-        orderBy: { createdAt: 'asc' },
-      });
+      const row = await claimDelivery();
       if (!row) return;
-      const claim = await db.outbox.updateMany({
-        where: { id: row.id, status: 'pending', expiresAt: { gt: new Date() }, nextAttemptAt: { lte: new Date() } },
-        data: { status: 'sending', attempts: { increment: 1 } },
-      });
-      if (!claim.count) return;
       try {
         if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
@@ -403,9 +392,11 @@ export class WhatsApp {
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;
         }
+        if(row.kind==='invitation') await finishInvitation();
         const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
         const result = await this.socket.sendMessage(recipient, row.kind === 'ai' ? decodeBotMessage(body) : {text:body});
+        if(row.kind==='invitation') await finishInvitation();
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
         await db.setting.upsert({
           where: { key: `outbox-message:${row.id}` },
@@ -417,6 +408,7 @@ export class WhatsApp {
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
       } catch (error) {
+        if(row.kind==='invitation') await finishInvitation();
         const code = (error as { output?: { statusCode?: number } })?.output?.statusCode;
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({

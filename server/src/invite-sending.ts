@@ -51,6 +51,12 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
     }));
     res.set('Cache-Control','no-store').json({items,total,offset});
   });
+  app.post('/api/admin/invite-deliveries/:id/cancel',auth,admin,async(req,res)=>{
+    const id=z.string().uuid().parse(req.params.id);
+    const result=await db.outbox.updateMany({where:{id,kind:'invitation',status:'pending'},data:{status:'cancelled',encryptedBody:''}});
+    if(!result.count)return res.status(409).json({error:'Este convite já não está em fila. Atualiza o estado.'});
+    res.json({status:'cancelled'});
+  });
   app.get('/api/admin/invite-deliveries/:id',auth,admin,async(req,res)=>{
     const id=z.string().uuid().parse(req.params.id);
     const batch=await db.setting.findUnique({where:{key:'invite-batch:'+id}});

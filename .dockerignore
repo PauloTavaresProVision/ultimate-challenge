@@ -2,6 +2,8 @@
 **/.env
 **/.env.*
 **/.session
+**/.web-session
+**/.wwebjs_cache
 **/.data
 **/generated
 .git

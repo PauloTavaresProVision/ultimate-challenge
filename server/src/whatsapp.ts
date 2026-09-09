@@ -1,3 +1,5 @@
+import {openWebWhatsApp} from './whatsapp-web.ts';
+import type {MessagingSocket,WhatsAppEngine} from './whatsapp-transport.ts';
 import {loadPostgresAuth} from './whatsapp-postgres-auth.ts';
 import {closeDiagnostic} from './whatsapp-close-diagnostic.ts';
 import {claimDelivery,finishInvitation} from './delivery-queue.ts';
@@ -14,6 +16,7 @@ import { joinApprovedPlayer } from './group-join.ts';
 import makeWASocket, {
   jidNormalizedUser,
   type WASocket,
+  type WAMessage,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
@@ -22,19 +25,34 @@ import { db } from './db.ts';
 import { decrypt, phoneFromJid } from './security.ts';
 const logger = pino({ level: 'silent' });
 export class WhatsApp {
+  constructor(private readonly webFactory:typeof openWebWhatsApp=openWebWhatsApp){}
   private gate = new SendGate();
-  get sendingPausedReason() { return this.gate.reason; }
+  engine:WhatsAppEngine='baileys';
+  private changing=false;
+  async initialize(){this.engine=(await db.setting.findUnique({where:{key:'whatsapp_engine'}}))?.value==='webjs'?'webjs':'baileys';}
+  async selectEngine(engine:WhatsAppEngine){
+    if(this.changing)throw new Error('Troca em curso.');
+    this.changing=true;
+    try {
+      await this.disconnect();
+      await db.setting.upsert({where:{key:'whatsapp_engine'},create:{key:'whatsapp_engine',value:engine},update:{value:engine}});
+      this.engine=engine;this.lastError=null;
+    } finally {this.changing=false;}
+  }
+  get sendingPausedReason() { return this.engine==='webjs'?null:this.gate.reason; }
   private async canSend() {
     const sock = this.socket;
     if (!sock || this.status !== 'connected') return false;
-    return await this.gate.allowed(() => sock.fetchAccountReachoutTimelock()) && this.socket === sock && this.status === 'connected';
+    if(this.engine==='webjs')return true;
+    return await this.gate.allowed(() => (sock as WASocket).fetchAccountReachoutTimelock()) && this.socket === sock && this.status === 'connected';
   }
-  private socket: WASocket | null = null;
+  private socket: MessagingSocket | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private enabled = false;
   private stopping = false;
   private auth: Awaited<ReturnType<typeof loadPostgresAuth>> | null = null;
   private opening: Promise<void> | null = null;
+  private closingSocket:Promise<void>|null=null;
   private generation = 0;
   private failures = 0;
   private sending = false;
@@ -107,10 +125,13 @@ export class WhatsApp {
     if (!this.socket || this.status !== 'connected')
       throw new Error('Liga o WhatsApp antes de enviar o teste.');
     if (!await this.canSend()) throw new Error(this.gate.reason ?? 'Envios em espera.');
+    const socket=this.socket;
+    if(!socket)throw new Error('Ligação interrompida.');
     const row=await db.outbox.create({data:{recipient:`${phone.slice(1)}@s.whatsapp.net`,kind:'test',status:'sending',attempts:1,encryptedBody:'',expiresAt:new Date(Date.now()+86400000)}});
     try {
-      const recipient = await resolveRecipient(row.recipient, pn => this.socket!.signalRepository.lidMapping.getLIDForPN(pn));
-      const result = await this.socket.sendMessage(recipient, { text });
+      const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
+      if(this.socket!==socket||this.status!=='connected')throw new Error('Ligação alterada antes do teste.');
+      const result = await socket.sendMessage(recipient, { text });
       if (!result?.key.id) throw new Error('Envio sem confirmação.');
       await db.setting.upsert({where:{key:`outbox-message:${row.id}`},create:{key:`outbox-message:${row.id}`,value:result.key.id},update:{value:result.key.id}});
       console.info('WhatsApp teste:', row.id, result.key.id);
@@ -125,14 +146,14 @@ export class WhatsApp {
     }
   }
   async connect() {
-    if (this.enabled || this.stopping) return;
+    if (this.enabled || this.stopping || this.changing) return;
     this.enabled = true;
     this.failures=0;
     await this.open();
   }
   private open():Promise<void> {
     if(this.opening)return this.opening;
-    this.opening=this.openSocket().finally(()=>{this.opening=null;});
+    this.opening=(this.engine==='webjs'?this.openWeb():this.openSocket()).finally(()=>{this.opening=null;});
     return this.opening;
   }
   private async openSocket() {
@@ -277,6 +298,21 @@ export class WhatsApp {
       });
       sock.ev.on('messages.upsert', ({ messages, type }) => {
         if (generation !== this.generation || !this.enabled || type !== 'notify') return;
+        this.handleMessages(messages);
+      });
+    } catch {
+      if (generation !== this.generation) return;
+      this.socket?.end(undefined);
+      await this.auth?.close().catch(()=>{});
+      this.auth = null;
+      this.lastError = 'Não foi possível iniciar a ligação. A sessão guardada foi preservada.';
+      this.status = 'error';
+      this.enabled = false;
+      this.socket = null;
+    }
+  }
+  private handleMessages(messages:WAMessage[]) {
+    const sock=this.socket;if(!sock)return;
         for (const message of messages) {
           if (message.key.fromMe) continue;
           const text =
@@ -312,17 +348,34 @@ export class WhatsApp {
             message.key.participantAlt ?? message.key.remoteJidAlt ?? null,
           ).catch(() => {});
         }
+  }
+  private async openWeb(){
+    if(!this.enabled)return;
+    const generation=++this.generation;
+    this.status='connecting';this.lastError=null;
+    try {
+      const sock=await this.webFactory({databaseUrl:config.DATABASE_URL,folder:config.WA_WEB_AUTH_DIR,executablePath:config.WA_WEB_EXECUTABLE,
+        qr:qr=>{void QRCode.toDataURL(qr).then(data=>{if(generation===this.generation&&this.enabled){this.qr=data;this.status='qr';}}).catch(()=>{});},
+        ready:()=>{if(generation!==this.generation)return;this.status='connected';this.qr=null;this.lastError=null;this.failures=0;this.connectedAt=new Date().toISOString();void this.reconcileWelcomes().catch(()=>{});},
+        closed:revoked=>{if(generation!==this.generation)return;
+          const closed=++this.generation;const previous=this.socket;this.socket=null;this.qr=null;
+          this.status=revoked?'logged_out':'disconnected';
+          this.lastError=revoked?'O WhatsApp Web terminou a sessão. Associa novamente por QR.':'WhatsApp Web interrompido. A recuperar a ligação.';
+          const closing=Promise.resolve(previous?.end());this.closingSocket=closing;
+          void closing.then(()=>{
+            if(closed!==this.generation||!this.enabled)return;
+            if(revoked){this.enabled=false;return;}
+            this.failures=Math.min(this.failures+1,8);
+            this.timer=setTimeout(()=>{this.timer=null;if(closed===this.generation&&this.enabled)void this.open();},Math.min(60000,2000*2**this.failures));
+          }).catch(()=>{if(closed===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível encerrar o navegador anterior.';}}).finally(()=>{if(this.closingSocket===closing)this.closingSocket=null;});
+        },
+        message:message=>{if(generation===this.generation&&this.enabled)this.handleMessages([message]);},
+        receipt:(id,status)=>{if(generation===this.generation)void this.recordReceipt(id,status).catch(()=>{});},
+        joined:(group,ids)=>{if(generation===this.generation)void queueWelcome(group,ids).catch(()=>{});}
       });
-    } catch {
-      if (generation !== this.generation) return;
-      this.socket?.end(undefined);
-      await this.auth?.close().catch(()=>{});
-      this.auth = null;
-      this.lastError = 'Não foi possível iniciar a ligação. A sessão guardada foi preservada.';
-      this.status = 'error';
-      this.enabled = false;
-      this.socket = null;
-    }
+      if(generation!==this.generation||!this.enabled){await sock.end();return;}
+      this.socket=sock;
+    }catch{if(generation===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível iniciar o WhatsApp Web. Verifica o navegador e se já existe outra ligação ativa.';}}
   }
   async disconnect() {
     this.stopping = true;
@@ -334,9 +387,11 @@ export class WhatsApp {
     this.socket = null;
     this.qr = null;
     this.status = 'disconnected';
-    sock?.end(undefined);
+    const stopped=Promise.resolve(sock?.end(undefined));
     try {
+      await stopped;
       await this.opening;
+      await this.closingSocket;
       await this.auth?.close();
       this.auth=null;
     } finally { this.stopping=false; }

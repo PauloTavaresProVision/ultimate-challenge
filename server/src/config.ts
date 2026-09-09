@@ -11,6 +11,8 @@ export const config = z
     ADMIN_EMAIL: z.email(),
     ADMIN_PASSWORD: z.string().min(8),
     WHATSAPP_GROUP_INVITE: z.string().default(''),
+    WA_WEB_AUTH_DIR: z.string().default('.web-session'),
+    WA_WEB_EXECUTABLE: z.string().default(''),
     WA_AUTH_DIR: z.string().default('.session'),
     WA_AUTO_CONNECT: z.enum(['true', 'false']).default('false'),
   })

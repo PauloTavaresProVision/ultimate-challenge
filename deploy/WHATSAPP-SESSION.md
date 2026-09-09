@@ -1,5 +1,29 @@
 # Sessão WhatsApp no PostgreSQL
 
+## Motor alternativo: WhatsApp Web
+
+Em WhatsApp > Método de ligação, escolhe Baileys ou WhatsApp Web. A seleção é
+guardada automaticamente. Mudar de motor encerra a ligação anterior; carrega
+depois em Ligar por QR. A primeira associação de cada motor exige o seu QR.
+Não há troca automática de motor quando uma ligação falha.
+
+Baileys mantém as chaves no PostgreSQL. WhatsApp Web mantém o perfil Chromium
+no volume `whatsapp_web_session`, separado do Baileys. Preserva ambos nos
+backups. O navegador corre sem janela no servidor, com o utilizador `node`;
+`init: true` recolhe os processos filhos. Não é necessário manter o computador
+pessoal ligado. O Chromium consome memória adicional ao motor Baileys.
+
+Os dois motores usam o mesmo bloqueio PostgreSQL para impedir utilização
+simultânea nesta instalação, e a mesma fila, intervalo de convites e lógica
+de inscrições. A troca pausa os envios até à próxima ligação. Envios já iniciados
+sem confirmação ficam incertos para não serem repetidos automaticamente.
+
+Teste isolado do adaptador: `node tests/whatsapp-web.mjs` (imagem local
+`ultimate-webjs-test`). Usa um cliente simulado e PostgreSQL real, sem enviar
+mensagens. A validação real de QR, receção e grupo exige associação pelo titular.
+
+## Persistência do Baileys
+
 A aplicação passa a guardar credenciais e chaves Signal cifradas nas tabelas
 `WhatsAppAuthSession` e `WhatsAppAuthKey`. Mantém a mesma `MESSAGE_KEY` do ambiente.
 Inclui estas tabelas no backup habitual do PostgreSQL e preserva a configuração

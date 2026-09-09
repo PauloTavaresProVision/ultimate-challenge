@@ -27,6 +27,7 @@ import {
 } from './security.ts';
 const app = express();
 const wa = new WhatsApp();
+await wa.initialize();
 const origin = new URL(config.APP_ORIGIN).origin;
 const secure = origin.startsWith('https:');
 const cookieName = 'escada_session';
@@ -345,7 +346,7 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
     where: { key: 'whatsapp_group' },
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
-  res.json({ status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
+  res.json({ engine:wa.engine, status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
     groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
 });
@@ -361,6 +362,10 @@ app.post('/api/admin/whatsapp/test', auth, admin, async (req, res) => {
   } catch {
     fail(wa.sendingPausedReason ? 409 : 502, wa.sendingPausedReason ?? 'Não foi possível confirmar o envio. Verifica o estado da mensagem antes de repetir.');
   }
+});
+app.post('/api/admin/whatsapp/engine', auth, admin, async (req,res)=>{
+  const {engine}=z.object({engine:z.enum(['baileys','webjs'])}).parse(req.body);
+  await wa.selectEngine(engine);res.json({engine:wa.engine,status:wa.status});
 });
 app.post('/api/admin/whatsapp/connect', auth, admin, async (_req, res) => {
   await wa.connect();

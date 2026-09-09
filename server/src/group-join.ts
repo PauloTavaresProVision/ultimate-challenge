@@ -1,6 +1,6 @@
-import type { WASocket } from '@whiskeysockets/baileys';
+import type { MessagingSocket } from './whatsapp-transport.ts';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
-export async function joinApprovedPlayer(socket: Pick<WASocket,'groupMetadata'|'groupParticipantsUpdate'>, group:string, phoneJid:string) {
+export async function joinApprovedPlayer(socket: Pick<MessagingSocket,'groupMetadata'|'groupParticipantsUpdate'>, group:string, phoneJid:string) {
   const metadata=await socket.groupMetadata(group);
   const normalize=(jid:string)=>jidNormalizedUser(jid);
   const present=()=>metadata.participants.some(p=>[p.id,p.phoneNumber].some(jid=>jid && normalize(jid)===normalize(phoneJid)));

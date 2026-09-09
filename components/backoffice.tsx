@@ -233,7 +233,7 @@ export default function Backoffice({
             )}
             <span className="connection">
               <span className="offline-dot" />{' '}
-              {liveState ? 'WhatsApp · Baileys' : 'WhatsApp desligado'}
+              {liveState ? 'WhatsApp' : 'WhatsApp desligado'}
             </span>
             <span className="top-divider" />
             <Avatar name="Administrador" />

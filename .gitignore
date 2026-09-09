@@ -40,6 +40,8 @@ next-env.d.ts
 server/node_modules/
 server/src/generated/
 server/.session/
+**/.web-session/
+**/.wwebjs_cache/
 server/.data/
 !server/.env.example
 !deploy/.env.example

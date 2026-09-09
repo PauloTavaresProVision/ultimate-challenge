@@ -23,7 +23,7 @@ export async function api<T = any>(
   return data;
 }
 type Group = { id: string; name: string };
-type Connection = { lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
+type Connection = { engine?: "baileys" | "webjs"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
@@ -64,13 +64,23 @@ export default function WhatsAppLive() {
   return <div className="wa-workspace">
     {error && <div className="form-error" role="alert">{error}</div>}
     {state.lastError && <p className="form-error" role="status">{state.lastError}</p>}
+    <section className="wa-card">
+      <div className="wa-field"><label htmlFor="wa-engine">Método de ligação</label>
+        <select id="wa-engine" className="wa-group-input" value={state.engine ?? 'baileys'} disabled={!!busy || state.status==='loading'} onChange={async e=>{
+          if(await action('/admin/whatsapp/engine',{engine:e.target.value})){setGroups([]);setSelected(null);setGroupsLoaded(false);setTestResult('');}
+        }} style={{width:'100%',padding:'12px 14px',border:'1px solid #dce4e8',borderRadius:10,background:'white',font:'inherit'}}>
+          <option value="baileys">Baileys</option><option value="webjs">WhatsApp Web · whatsapp-web.js</option>
+        </select>
+        <small>Ao mudar, a ligação atual é encerrada e a fila fica em espera. Depois carrega em Ligar por QR.</small>
+      </div>
+    </section>
     <section className="wa-connection">
       <div className="wa-account">
         <div className="wa-account-icon"><MessageCircle size={27} /></div>
         <div><span className="wa-eyebrow">CONTA DO TORNEIO</span><h2>{connected ? state.account?.phone ?? 'Número indisponível' : 'Liga o WhatsApp do Ultimate Challenge'}</h2><p>{connected ? state.account?.name || 'WhatsApp associado' : 'Associa o número que vai comunicar com os jogadores.'}</p></div>
       </div>
       <div className="wa-connection-actions"><span className={`wa-status ${connected ? 'is-connected' : ''}`}><span />{statusLabel}</span>
-        {connected ? <Button variant="outline" disabled={!!busy} onClick={() => action('/admin/whatsapp/disconnect')}><Unplug size={15} /> Desligar</Button> : <Button disabled={!!busy || ['loading', 'connecting', 'qr'].includes(state.status)} onClick={() => action('/admin/whatsapp/connect')}><QrCode size={16} /> Ligar por QR</Button>}
+        {['connected','connecting','qr'].includes(state.status) ? <Button variant="outline" disabled={!!busy} onClick={() => action('/admin/whatsapp/disconnect')}><Unplug size={15} /> Desligar</Button> : <Button disabled={!!busy || ['loading', 'connecting', 'qr'].includes(state.status)} onClick={() => action('/admin/whatsapp/connect')}><QrCode size={16} /> Ligar por QR</Button>}
       </div>
       <div className="wa-connection-meta"><span><Smartphone size={14} /> Ligação por Baileys</span><span>{connected && state.connectedAt ? `Ligado desde ${new Date(state.connectedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : 'Estado atualizado automaticamente'}</span></div>
       {state.qr && <div className="wa-qr"><img src={state.qr} alt="QR para associar o WhatsApp" width={220} height={220} /><div><h3>Associa o teu telemóvel</h3><p>No WhatsApp, abre <strong>Dispositivos associados</strong> e escolhe <strong>Associar dispositivo</strong>. Depois lê este código.</p></div></div>}

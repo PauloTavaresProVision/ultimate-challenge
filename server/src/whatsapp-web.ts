@@ -29,6 +29,9 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     await recoverBrowserLock(resolve(options.folder,'session-ultimate'));
     client=createClient({
       authStrategy:new WWebJS.LocalAuth({clientId:'ultimate',dataPath:resolve(options.folder)}),
+      // The image WORKDIR is root-owned. Cache persistence runs after authenticated
+      // and before ready, so its default relative path would strand initialization.
+      webVersionCache:{type:'local',path:resolve(options.folder,'web-cache')},
       takeoverOnConflict:false,authTimeoutMs:60000,qrMaxRetries:8,
       puppeteer:{headless:true,executablePath:options.executablePath||undefined,
         args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']}

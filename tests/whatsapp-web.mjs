@@ -24,7 +24,7 @@ try{
  const options={databaseUrl:config.DATABASE_URL,folder:'/tmp/web-profile',qr:()=>{},ready:()=>ready++,closed:()=>closed++,message:m=>received.push(m),receipt:(id,status)=>receipts.push({id,status}),joined:(id,members)=>joins.push({id,members})};
  let socket;
  try {
- socket=await openWebWhatsApp(options,opts=>{assert.equal(opts.takeoverOnConflict,false);return fake;});
+ socket=await openWebWhatsApp(options,opts=>{assert.equal(opts.takeoverOnConflict,false);assert.equal(opts.webVersionCache.path,'/tmp/web-profile/web-cache');return fake;});
  await new Promise(r=>setImmediate(r));assert.equal(ready,1);
  await assert.rejects(loadPostgresAuth({connectionString:config.DATABASE_URL,encryptionKey:config.MESSAGE_KEY,folder:'/tmp/unused',onFailure:()=>{}}),/outro processo/);
  assert.equal(socket.user.id,'244900000001@s.whatsapp.net');

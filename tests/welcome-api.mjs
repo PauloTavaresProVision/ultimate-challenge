@@ -39,6 +39,14 @@ try{
  assert.equal((await db.outbox.findUnique({where:{id:row.id}})).status,'pending');
  await db.outbox.update({where:{id:row.id},data:{status:'sent'}});
  await assert.rejects(retryWelcome(row.id));
+ const missed=await db.player.create({data:{name:'Entrada durante desligamento',phone:'+244900000002',birth:new Date('1990-01-01'),side:'Esquerda',division:'M2',status:'Ativo',verified:true,note:''}});
+ // Snapshot after reconnect: approved members are reconciled, outsiders ignored.
+ await queueWelcome(group,[jid,'244900000002@s.whatsapp.net','244900000099@s.whatsapp.net']);
+ assert.equal(await db.outbox.count(),2);
+ await queueWelcome(group,[jid,'244900000002@s.whatsapp.net']);
+ assert.equal(await db.outbox.count(),2);
+ assert.equal((await db.outbox.findUnique({where:{id:row.id}})).status,'sent');
+ console.log('PASS: missed group entry is recovered once and previously sent welcome is untouched.');
  console.log('PASS: welcome retry checks active player and current group, serializes duplicate requests, rejects pending and sent messages. No messages sent.');
  console.log('PASS: approved players only, selected group only, phone identity, concurrent deduplication, persistent replay protection and welcome text. No messages sent.');
  }finally{await db.$disconnect();}

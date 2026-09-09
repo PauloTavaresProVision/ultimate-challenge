@@ -498,6 +498,9 @@ app.use(
 const timer = setInterval(() => {
   void wa.deliver().catch(() => {});
 }, 2000);
+const welcomeTimer=setInterval(()=>{
+  void wa.reconcileWelcomes().catch(()=>console.error('WhatsApp: falha ao verificar boas-vindas em falta.'));
+},60000);
 let competitionRunning=false;
 const tickCompetition=async()=>{if(competitionRunning)return;competitionRunning=true;try{await runCompetition();}catch{console.error('Não foi possível processar o calendário da competição.');}finally{competitionRunning=false;}};
 const competitionTimer=setInterval(()=>void tickCompetition(),60000);
@@ -520,6 +523,7 @@ if (config.WA_AUTO_CONNECT === 'true') await wa.connect();
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => {
     clearInterval(timer);
+    clearInterval(welcomeTimer);
     clearInterval(competitionTimer);
     clearInterval(cleanup);
     void wa

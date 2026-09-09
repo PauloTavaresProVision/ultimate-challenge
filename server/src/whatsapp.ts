@@ -39,6 +39,20 @@ export class WhatsApp {
   private generation = 0;
   private failures = 0;
   private sending = false;
+  private checkingWelcomes = false;
+  async reconcileWelcomes() {
+    const socket=this.socket;
+    if(this.checkingWelcomes||!socket||this.status!=='connected')return;
+    this.checkingWelcomes=true;
+    try {
+      const group=await db.setting.findUnique({where:{key:'whatsapp_group'}});
+      if(!group?.value)return;
+      const metadata=await socket.groupMetadata(group.value);
+      if(this.socket!==socket||this.status!=='connected')return;
+      const jids=metadata.participants.flatMap(p=>[p.id,p.phoneNumber??'']);
+      await queueWelcome(group.value,jids);
+    } finally {this.checkingWelcomes=false;}
+  }
   status:
     | 'disconnected'
     | 'connecting'
@@ -208,6 +222,7 @@ export class WhatsApp {
           this.lastError = null;
           this.qr = null;
           this.failures = 0;
+          void this.reconcileWelcomes().catch(()=>console.error('WhatsApp: falha ao verificar boas-vindas em falta.'));
           void this.diagnose(sock).catch(()=>console.error('WhatsApp diagnóstico: não foi possível concluir a consulta.'));
         }
         if (update.connection === 'close') {
@@ -434,7 +449,7 @@ export class WhatsApp {
           ready();
           attempted = true;
           const outcome=await joinApprovedPlayer(socket,payload.group,row.recipient);
-          if(outcome==='added')await queueWelcome(payload.group,[row.recipient]);
+          if(outcome==='added'||outcome==='already_member')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite') {
             const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
             ready();

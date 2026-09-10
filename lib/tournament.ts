@@ -22,6 +22,7 @@ export type Game = {
   id: string;
   round: number;
   division: Division;
+  /** Playing positions for this round: [left player, right player]. */
   a: string[];
   b: string[];
   court: string;

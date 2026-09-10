@@ -1,5 +1,6 @@
 'use client';
-import {nextRoundCalendar,normalizeCalendar,scheduleDivisions,type WeeklyCalendar,type RoundCalendar} from '../lib/weekly-calendar';
+import DrawDialog from './draw-dialog';
+import {nextRoundCalendar,normalizeCalendar,type WeeklyCalendar,type RoundCalendar} from '../lib/weekly-calendar';
 import Substitutions from './substitutions';
 import RulesEditor from './rules-editor';
 import CalendarSettings from './calendar-settings';
@@ -73,7 +74,6 @@ import {
 import { Badge, Avatar } from '@/components/backoffice';
 import {
   divisions,
-  draw,
   rankings,
   conflict,
   type Player,
@@ -91,6 +91,7 @@ type Props = {
   setAudit: Dispatch<SetStateAction<string[]>>;
   view: string;
   division: string;
+  onDivisionChange?: (division:string)=>void;
   players: Player[];
   setPlayers: Dispatch<SetStateAction<Player[]>>;
   courts: Court[];
@@ -171,6 +172,7 @@ export default function WorkspaceViews({
   onSaveChanges,
   view,
   division,
+  onDivisionChange,
   players,
   setPlayers,
   courts,
@@ -181,17 +183,18 @@ export default function WorkspaceViews({
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Todos');
   const [side, setSide] = useState('Todos os lados');
+  const [drawOpen,setDrawOpen]=useState(false);
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
   const [editCourt, setEditCourt] = useState<Court | null>(null);
   const [editGame, setEditGame] = useState<Game | null>(null);
   useEffect(()=>{
-    if(editingRef)editingRef.current=!!(editPlayer||editCourt||editGame);
+    if(editingRef)editingRef.current=!!(editPlayer||editCourt||editGame||drawOpen);
     return()=>{if(editingRef)editingRef.current=false;};
-  },[editingRef,editPlayer,editCourt,editGame]);
+  },[editingRef,editPlayer,editCourt,editGame,drawOpen]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');
-  const [excluded, setExcluded] = useState<string[]>([]);
+
   const [settingsTab,setSettingsTab]=useState('general');
   const [calendarLoading,setCalendarLoading]=useState(!!live);
   const [calendarError,setCalendarError]=useState('');
@@ -238,10 +241,11 @@ export default function WorkspaceViews({
   const name = (id: string) =>
     players.find((p) => p.id === id)?.name ?? 'Jogador removido';
   const teams = (g: Game, team: 'a' | 'b') => g[team].map(name).join(' / ');
-  const pendingRound = games.find((g) => !g.published)?.round;
+  const divisionGames = games.filter(g=>division==='Todas'||g.division===division);
+  const pendingRound = divisionGames.find((g) => !g.published)?.round;
   const nextRound =
-    pendingRound ?? Math.max(0, ...games.map((g) => g.round)) + 1;
-  const roundGames = games.filter((g) => g.round === nextRound);
+    pendingRound ?? Math.max(0, ...divisionGames.map((g) => g.round)) + 1;
+  const roundGames = divisionGames.filter((g) => g.round === nextRound);
   const relevantGames = games.filter(
     (g) =>
       (division === 'Todas' || g.division === division) &&
@@ -348,46 +352,6 @@ export default function WorkspaceViews({
     setEditCourt(null);
     inform('Campo guardado.');
   }
-  async function generate() {
-    try {
-      const available = courts.filter((c) => c.active);
-      if (!available.length)
-        throw new Error('Adiciona pelo menos um campo ativo.');
-      if (games.some((g) => g.round !== nextRound && !g.winner))
-        throw new Error(
-          'Conclui os resultados da ronda anterior antes de preparar outra.',
-        );
-      const prior = games.filter((g) => g.round < nextRound);
-      for(const division of divisions){
-        if(!players.some(p=>p.status==='Ativo'&&p.verified&&p.division===division&&!excluded.includes(p.id)))continue;
-        const slot=roundCalendar[division];
-        if(!slot.date||!slot.time)throw new Error('Indica a data e a hora de '+division+'.');
-        const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
-        if(live&&slot.date<today)throw new Error('A data de '+division+' já passou.');
-        const latest=prior.filter(g=>g.division===division).map(g=>g.date).sort().at(-1);
-        if(latest&&(Date.parse(slot.date)-Date.parse(latest))/86400000<7)throw new Error('A divisão '+division+' deve jogar pelo menos uma semana depois da ronda anterior.');
-      }      const pairs = draw(
-        players.filter((p) => !excluded.includes(p.id)),
-        prior,
-        nextRound,
-      );
-      if(calendarLoading||calendarError)throw new Error(calendarError||'A carregar o calendário.');
-      const generated = scheduleDivisions(pairs, available, nextRound, roundCalendar);
-      if (generated.some((g) => conflict(g, [...prior, ...generated])))
-        throw new Error(
-          'Existe conflito de campo ou jogador no horário proposto.',
-        );
-      const encounters = generated.map(g=>[...g.a,...g.b].sort().join('|'));
-      const repeated = encounters.length - new Set(encounters).size;
-      if(!await persist({games:[...prior,...generated]},`Ronda ${nextRound} sorteada.`))return;
-      inform(
-        `Ronda ${nextRound} sorteada: ${generated.length} jogos de 20 minutos, dupla fixa. ${repeated ? repeated + " confrontos repetidos por limitação de duplas/campos." : "Sem repetir adversários."}`,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-      setNotice('');
-    }
-  }
   async function saveGame() {
     if (saving || !editGame) return;
     if (
@@ -430,7 +394,7 @@ export default function WorkspaceViews({
   function previewMessage() {
     const sections = divisions
       .map((d) => {
-        const rows = games.filter(
+        const rows = roundGames.filter(
           (g) => g.round === nextRound && g.division === d,
         );
         if (!rows.length) return '';
@@ -789,74 +753,12 @@ export default function WorkspaceViews({
       {view === 'Rondas e sorteios' && (
         <>
           {live && <Substitutions />}
-          <div className="round-workflow">
-            <span className="step active">
-              1 <b>Participantes</b>
-            </span>
-            <span className={`step ${roundGames.length ? 'active' : ''}`}>
-              2 <b>Sorteio e horários</b>
-            </span>
-            <span className="step">
-              3 <b>Revisão</b>
-            </span>
-          </div>
           <section className="panel">
-            <div className="section-heading">
-              <div>
-                <h2>Preparar a ronda {String(nextRound).padStart(2, '0')}</h2>
-                <p>
-                  O sorteio abrange as quatro divisões. Cada jogador faz quatro jogos de 20 minutos, com dupla fixa e rotação de campos.
-                </p>
-              </div>
-              <Badge tone="neutral">Rascunho</Badge>
-            </div>
-            <div className="round-controls">
-              <div className="division-calendar">{divisions.map(d=><div className="division-calendar-row" key={d}><strong>{d}</strong><label>Data dos jogos<Input type="date" value={roundCalendar[d].date} disabled={saving||calendarLoading} onChange={e=>setRoundCalendar({...roundCalendar,[d]:{...roundCalendar[d],date:e.target.value}})}/></label><label>Hora (Angola)<Input type="time" value={roundCalendar[d].time} disabled={saving||calendarLoading} onChange={e=>setRoundCalendar({...roundCalendar,[d]:{...roundCalendar[d],time:e.target.value}})}/></label></div>)}</div>
-              <div className="round-summary">                {calendarError&&<p role="alert" className="form-error">{calendarError}</p>}
-                <Users size={18} />
-                <strong>
-                  {active.filter((p) => !excluded.includes(p.id)).length}
-                </strong>{' '}
-                participantes <span>·</span>
-                <MapPin size={18} />
-                {courts.filter((c) => c.active).length} campos
-              </div>
-              <Button disabled={saving||calendarLoading||!!calendarError} onClick={generate}>
-                <Shuffle size={17} />
-                {roundGames.length ? 'Refazer sorteio' : 'Gerar sorteio'}
-              </Button>
-            </div>
-            <details className="participants">
-              <summary>Escolher participantes e gerir ausências</summary>
-              <div className="participants-grid">
-                {active.map((p) => (
-                  <label key={p.id}>
-                    <Checkbox
-                      checked={!excluded.includes(p.id)}
-                      onCheckedChange={(v) =>
-                        setExcluded((ids) =>
-                          v ? ids.filter((id) => id !== p.id) : [...ids, p.id],
-                        )
-                      }
-                    />
-                    <span>
-                      {p.name}
-                      <small>
-                        {p.division} · {p.side}
-                      </small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </details>
-            <div className="info-note compact">
-              <ShieldCheck size={17} />
-              <span>
-                Um esquerda + um direita. Sem repetir parceiros da semana
-                anterior.
-              </span>
-            </div>
+            <div className="section-heading"><div><h2>Sorteios por divisão</h2><p>Escolhe o nível, os participantes e os campos. Revê o resultado antes de publicar.</p></div>
+            <Button disabled={saving||calendarLoading||!!calendarError} onClick={()=>setDrawOpen(true)}><Shuffle size={17}/> Preparar sorteio</Button></div>
+            {calendarError&&<p className="form-error">{calendarError}</p>}
           </section>
+          {drawOpen&&<DrawDialog initialDivision={divisions.includes(division as Division)?division as Division:'M1+'} calendar={roundCalendar} players={players} courts={courts} games={games} live={live} onClose={()=>setDrawOpen(false)} onSave={async(next,entry)=>{const ok=await persist({games:next},entry);if(ok){onDivisionChange?.(next[next.length-1].division);inform('Sorteio guardado em rascunho. Revê os jogos antes de publicar.');}return ok;}}/>}
           {roundGames.length > 0 && (
             <>
               <div className="section-heading outside round-results-heading">
@@ -868,7 +770,7 @@ export default function WorkspaceViews({
                   variant="outline"
                   disabled={saving || roundGames.every(g=>g.published)}
                   onClick={async () => {
-                    if(await persist({games:games.map(g=>g.round===nextRound?{...g,published:true}:g)},`Ronda ${nextRound} publicada.`)) inform('Ronda publicada. O envio ao grupo segue o agendamento configurado.');                  }}
+                    if(await persist({games:games.map(g=>roundGames.some(r=>r.id===g.id)?{...g,published:true}:g)},`Ronda ${nextRound} publicada.`)) inform('Ronda publicada. O envio ao grupo segue o agendamento configurado.');                  }}
                 >
                   <Check size={16} />{' '}
                   {live
@@ -900,8 +802,7 @@ export default function WorkspaceViews({
                 <div>
                   <h2>Mensagem para o grupo Ultimate Challenge</h2>
                   <p>
-                    Uma mensagem com os jogos de M1+, M1, M2+ e M2. O envio ainda não
-                    está ligado.
+                    Pré-visualiza os jogos preparados. O envio só acontece após a publicação, conforme o agendamento.
                   </p>
                 </div>
                 <Button variant="outline" onClick={previewMessage}>
@@ -1510,14 +1411,14 @@ function GameCard({
             </div>
           )}
           <div className={`game-team ${g.winner === team ? 'winner' : ''}`}>
-            {g[team].map((id) => {
+            {g[team].map((id, position) => {
               const p = players.find((p) => p.id === id);
               return (
                 <div className="person-cell" key={id}>
                   <Avatar name={p?.name ?? 'Jogador'} />
                   <div>
                     <strong>{g.absentIds?.includes(id) ? 'Aguarda suplente' : p?.name}</strong>
-                    <small>{p?.side}</small>
+                    <small>{position === 0 ? 'Esquerda' : 'Direita'}</small>
                   </div>
                 </div>
               );

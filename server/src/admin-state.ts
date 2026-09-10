@@ -85,8 +85,8 @@ export function installAdminState(
           )
         )
           bad('O jogo contém jogadores não elegíveis.');
-        if (new Set(people.map((p) => p!.side)).size !== 2)
-          bad('A dupla deve ter esquerda e direita.');
+        // Pair order stores the playing sides for this round: [left, right].
+        // A player's habitual side can differ without editing their profile.
         const previous = data.games.filter((x) => x.round === g.round - 1);
         if (
           previous.some((x) =>
@@ -99,8 +99,8 @@ export function installAdminState(
       for (const id of ids) {
         const appearances = data.games.filter(other => other.round === g.round && [...other.a, ...other.b].includes(id));
         if (appearances.length > 4) bad('Cada jogador pode fazer no máximo quatro jogos por ronda.');
-        const pair = (g.a.includes(id) ? g.a : g.b).slice().sort().join('|');
-        if (appearances.some(other => (other.a.includes(id) ? other.a : other.b).slice().sort().join('|') !== pair))
+        const pair = (g.a.includes(id) ? g.a : g.b).join('|');
+        if (appearances.some(other => (other.a.includes(id) ? other.a : other.b).join('|') !== pair))
           bad('A dupla deve manter-se fixa nos quatro jogos da ronda.');
         if (appearances.length > 1 && appearances.some(other => other.duration !== 20 || other.date !== g.date))
           bad('Os quatro jogos devem durar 20 minutos e acontecer no mesmo dia.');

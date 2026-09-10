@@ -16,7 +16,8 @@ async function mark(tx:Prisma.TransactionClient,playerId:string,round:number,sou
  const games=await tx.game.findMany({where:{round,published:true,OR:[{a:{has:playerId}},{b:{has:playerId}}]}});
  if(games.length!==4||games.some(g=>g.winner||g.duration!==20||g.date!==games[0].date)||games.some(g=>g.date<todayLuanda()))fail('A ausência exige quatro jogos publicados ainda sem resultados. Contacta a organização.');
  if(await tx.setting.findUnique({where:{key:'competition:month:'+games[0].date.slice(0,7)}}))fail('O mês já está encerrado.');
- const v:Vacancy={id:crypto.randomUUID(),round,date:games[0].date,playerId,name:p!.name,division:games[0].division,side:p!.side,gameIds:games.map(g=>g.id),sourceId,candidates:[],status:'pending'};
+ const pair=games[0].a.includes(playerId)?games[0].a:games[0].b;
+ const v:Vacancy={id:crypto.randomUUID(),round,date:games[0].date,playerId,name:p!.name,division:games[0].division,side:pair.indexOf(playerId)===0?'Esquerda':'Direita',gameIds:games.map(g=>g.id),sourceId,candidates:[],status:'pending'};
  await tx.setting.create({data:{key:'absence:'+v.id,value:JSON.stringify(v)}});
  await tx.audit.create({data:{actor:playerId,action:`Ausência registada: ${p!.name}, ronda ${round}. Aguarda suplente.`}});
  await notice(tx,`${p!.name} não participa na ronda ${round} (${v.date}). Os quatro jogos aguardam suplente. Podes responder “posso substituir” a esta ausência; a organização tem de aprovar.`);

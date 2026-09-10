@@ -553,6 +553,7 @@ export default function Backoffice({
               key={view}
               view={view}
               division={division}
+              onDivisionChange={setDivision}
               players={players}
               setPlayers={setPlayers}
               games={games}

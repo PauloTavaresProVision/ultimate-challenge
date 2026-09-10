@@ -32,13 +32,13 @@ try{
  const failure=await denied.json();assert.equal(failure.ok,false);assert.match(failure.error,/401/);assert.equal(JSON.stringify(failure).includes('fake-token'),false);
  globalThis.fetch=realFetch;
  const hook=async(body,secret='fake-hook-secret')=>realFetch(base+'/api/webhooks/zapi/'+secret,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- const calls=[];let members=false;
+ const calls=[];let members=false,remoteConnected=true;
  globalThis.fetch=async(url,options)=>{
    const u=new URL(url);assert.equal(u.origin,'https://api.z-api.io');assert.equal(options.headers['Client-Token'],'fake-client');
    const path=u.pathname.split('/token/fake-token/')[1];calls.push(path);let data;
    if(path==='update-every-webhooks'){assert(JSON.parse(options.body).value.startsWith('https://'));data={value:true};}
-   else if(path==='update-queue-settings'){assert.equal(JSON.parse(options.body).disableEnqueueWhenDisconnected,true);data={success:true};}
-   else if(path==='status')data={connected:true};
+   else if(path==='update-queue-settings'){assert.equal(JSON.parse(options.body).disableEnqueueWhenDisconnected,true);data={value:true};}
+   else if(path==='status')data={connected:remoteConnected};
    else if(path==='device')data={phone:'244900000001',name:'Test'};
    else if(path==='send-text'){const body=JSON.parse(options.body);assert.equal(body.phone,'123-group');assert.deepEqual(body.mentioned,['244900000002']);data={messageId:'message-1',zaapId:'queue-1'};}
    else if(path==='groups')data=[{phone:'123-group',name:'Escada'}];
@@ -52,6 +52,11 @@ try{
  const socket=await openZApi({databaseUrl:config.DATABASE_URL,folder:'/tmp/unused',qr:()=>{},ready:()=>ready++,closed:()=>{},message:m=>messages.push(m),receipt:()=>{},joined:(...a)=>joins.push(a)});
  try{
    await new Promise(r=>setTimeout(r,100));assert.equal(ready,1);
+   assert.ok((await db.setting.findUnique({where:{key:'zapi-queue-warning'}})).value);
+   remoteConnected=false;
+   await assert.rejects(socket.sendMessage('123@g.us',{text:'Do not send'}),/não foi enviada/);
+   assert.equal(calls.includes('send-text'),false);
+   remoteConnected=true;
    await assert.rejects(openZApi({databaseUrl:config.DATABASE_URL,folder:'/tmp/unused',qr:()=>{},ready:()=>{},closed:()=>{},message:()=>{},receipt:()=>{},joined:()=>{}}),/Outra ligação/);
    assert.equal((await socket.groupFetchAllParticipating())['123@g.us'].subject,'Escada');
    assert.equal((await socket.groupParticipantsUpdate('123@g.us',['244900000002@s.whatsapp.net'],'add'))[0].status,'200');

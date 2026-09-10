@@ -49,7 +49,7 @@ Foram lidas as secções abaixo para os fluxos desta aplicação; não há imple
 - LID não é tratado como número. O par participantPhone/participantLid é guardado quando disponibilizado.
 - Adicionar participantes usa autoInvite=false. Só confirma entrada depois de verificar os membros do grupo. value:true sozinho não basta.
 - Pausa e espaçamento dos convites usam a fila existente. Pedidos já aceites pelo fornecedor podem terminar depois de pausar.
-- Ao ativar, configura `disableEnqueueWhenDisconnected=true` para não acumular novos envios na fila remota durante uma desconexão. Não elimina mensagens já aceites pela Z-API.
+- Ao ativar, tenta configurar `disableEnqueueWhenDisconnected=true`. Se a API não confirmar, mantém a ligação e apresenta um aviso, sem afirmar que a proteção remota está ativa. Consulta o estado antes de cada envio; uma queda entre a consulta e o envio ainda pode permitir entrada na fila remota. Não elimina mensagens já aceites pela Z-API.
 - Desligar na plataforma termina o adaptador local e liberta o bloqueio de exclusividade; não revoga a associação remota. A sessão pode ser removida no painel Z-API.
 
 ## Limitações e validação real pendente

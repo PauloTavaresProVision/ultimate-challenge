@@ -350,8 +350,9 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
     where: { key: 'whatsapp_group' },
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
+  const warning=wa.engine==='zapi'?(await db.setting.findUnique({where:{key:'zapi-queue-warning'}}))?.value:null;
   res.json({ automaticPaused:await automaticPaused(), engine:wa.engine, status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
-    groupName: groupName?.value ?? null, account: wa.account,
+    warning:warning||null, groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
 });
 app.post('/api/admin/whatsapp/pause', auth, admin, async (req,res)=>{

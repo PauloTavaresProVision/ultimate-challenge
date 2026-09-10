@@ -30,7 +30,7 @@ export async function api<T = any>(
   return data;
 }
 type Group = { id: string; name: string };
-type Connection = { automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
+type Connection = { warning?: string | null; automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
@@ -90,6 +90,7 @@ export default function WhatsAppLive() {
   return <div className="wa-workspace">
     {error && <div className="form-error" role="alert">{error}</div>}
     {state.lastError && <p className="form-error" role="status">{state.lastError}</p>}
+    {state.warning && <p role="status">{state.warning}</p>}
     <section className="wa-card" aria-label="Envios automáticos">
       <header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div>
         <h2>{state.automaticPaused ? 'Envios automáticos pausados' : 'Envios automáticos ativos'}</h2>

@@ -19,8 +19,13 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
     const origin=new URL(config.APP_ORIGIN);if(origin.protocol!=='https:')throw new Error('A Z-API exige um endereço público HTTPS para os webhooks.');
     const result=await client.call('update-every-webhooks','PUT',{value:`${origin.origin}/api/webhooks/zapi/${settings.webhookSecret}`,notifySentByMe:false});
     if(result.value!==true)throw new Error('A Z-API não confirmou a configuração dos webhooks.');
-    const queue=await client.call('update-queue-settings','PUT',{disableEnqueueWhenDisconnected:true});
-    if(queue.success!==true)throw new Error('Z-API não confirmou a proteção da fila quando desligada.');
+    let protectedQueue=false;
+    try{
+      const queue=await client.call('update-queue-settings','PUT',{disableEnqueueWhenDisconnected:true});
+      protectedQueue=queue?.success===true;
+    }catch{/* Optional provider setting must not invalidate an authenticated connection. */}
+    const warning=protectedQueue?'':'A Z-API não confirmou o bloqueio da sua fila quando desligada. A plataforma verifica a ligação antes de cada envio, mas a fila remota pode aceitar mensagens se a ligação cair entretanto.';
+    await db.setting.upsert({where:{key:'zapi-queue-warning'},create:{key:'zapi-queue-warning',value:warning},update:{value:warning}});
   }catch(e){stopped=true;await lease.end();throw e;}
   const check=()=>{if(stopped||!connected)throw new Error('Z-API desligada.');};
   const metadata=async(id:string):Promise<GroupInfo>=>{
@@ -33,7 +38,10 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
     signalRepository:{lidMapping:{getLIDForPN:async()=>null,getPNForLID:async lid=>{
       const r=await db.setting.findUnique({where:{key:'zapi-lid:'+settings.instanceId+':'+lid}});return r?.value??null;
     }}},
-    async sendMessage(id,content){check();const r=await client.call('send-text','POST',{phone:zPhone(id),message:content.text,...(content.mentions?.length?{mentioned:content.mentions.map(zPhone)}:{})});
+    async sendMessage(id,content){check();
+      const status=await client.call('status');
+      if(status?.connected!==true)throw new Error('Z-API desligada. A mensagem não foi enviada à API.');
+      check();const r=await client.call('send-text','POST',{phone:zPhone(id),message:content.text,...(content.mentions?.length?{mentioned:content.mentions.map(zPhone)}:{})});
       if(typeof r.messageId!=='string'||!r.messageId)throw new Error('Z-API não devolveu o identificador do envio.');
       const messageId=zMessageId(settings.instanceId,r.messageId);
       // HTTP 200 means queued at Z-API, not delivered to WhatsApp.

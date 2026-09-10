@@ -50,6 +50,8 @@ export function installZSettings(app:Express,auth:RequestHandler,admin:RequestHa
   app.post('/api/admin/whatsapp/zapi/test',auth,admin,async(_req,res)=>{
     const s=await loadZSettings();if(!s)return res.status(409).json({error:'Configura a Z-API primeiro.'});
     try{const status=await new ZApiClient(s).call('status');if(typeof status.connected!=='boolean')throw new Error('Z-API não devolveu um estado válido. Verifica os três campos de acesso.');res.json({ok:true,connected:status.connected===true});}
-    catch(e){res.status(502).json({error:(e as Error).message});}
+    // This is the result of a connectivity check, not a gateway failure of our API.
+    // Reverse proxies can replace 502 JSON with HTML and hide the diagnostic.
+    catch(e){res.json({ok:false,error:(e as Error).message});}
   });
 }

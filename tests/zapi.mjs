@@ -19,12 +19,18 @@ try{
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import express from 'express';
  import {db} from './src/db.ts';import {config} from './src/config.ts';import {encrypt} from './src/security.ts';
- import {openZApi} from './src/whatsapp-zapi.ts';import {installZWebhook} from './src/zapi-settings.ts';import {deliveryStatus} from './src/delivery-status.ts';
+ import {openZApi} from './src/whatsapp-zapi.ts';import {installZWebhook,installZSettings} from './src/zapi-settings.ts';import {deliveryStatus} from './src/delivery-status.ts';
  const credentials={instanceId:'test-instance',token:'fake-token',clientToken:'fake-client',webhookSecret:'fake-hook-secret'};
  await db.setting.create({data:{key:'zapi-credentials',value:encrypt(JSON.stringify(credentials),config.MESSAGE_KEY)}});
  await db.setting.createMany({data:[{key:'whatsapp_engine',value:'zapi'},{key:'whatsapp_group',value:'123@g.us'}]});
  const app=express();app.use(express.json());installZWebhook(app);const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  const base='http://127.0.0.1:'+server.address().port;const realFetch=globalThis.fetch;
+ installZSettings(app,(_req,_res,next)=>next(),(_req,_res,next)=>next(),()=>false);
+ globalThis.fetch=async()=>new Response('{}',{status:401});
+ const denied=await realFetch(base+'/api/admin/whatsapp/zapi/test',{method:'POST'});
+ assert.equal(denied.status,200,'Connectivity failure must remain a structured test result, not a proxy-intercepted 502');
+ const failure=await denied.json();assert.equal(failure.ok,false);assert.match(failure.error,/401/);assert.equal(JSON.stringify(failure).includes('fake-token'),false);
+ globalThis.fetch=realFetch;
  const hook=async(body,secret='fake-hook-secret')=>realFetch(base+'/api/webhooks/zapi/'+secret,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  const calls=[];let members=false;
  globalThis.fetch=async(url,options)=>{

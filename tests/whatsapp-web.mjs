@@ -12,7 +12,7 @@ try{
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
 
 
- for(const name of ['whatsapp-zapi.ts','zapi-client.ts','zapi-settings.ts','whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
+ for(const name of ['group-recovery.ts','whatsapp-zapi.ts','zapi-client.ts','zapi-settings.ts','whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import WWebJS from 'whatsapp-web.js';

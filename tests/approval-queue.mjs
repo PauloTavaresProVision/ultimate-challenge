@@ -9,7 +9,7 @@ try{
  const url=new URL(source.DATABASE_URL);url.pathname='/'+database;
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
- for(const name of ['admin-state.ts','whatsapp-zapi.ts','zapi-client.ts','zapi-settings.ts','whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
+ for(const name of ['admin-state.ts','group-recovery.ts','whatsapp-zapi.ts','zapi-client.ts','zapi-settings.ts','whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  console.log(docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import express from 'express';

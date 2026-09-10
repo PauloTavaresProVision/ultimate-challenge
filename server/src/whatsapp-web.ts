@@ -6,6 +6,7 @@ import type {WAMessage} from '@whiskeysockets/baileys';
 import type {GroupInfo,MessagingSocket} from './whatsapp-transport.ts';
 import {webStartupError} from './whatsapp-web-error.ts';
 import {recoverBrowserLock} from './whatsapp-browser-lock.ts';
+import {lostWebContext} from './group-recovery.ts';
 
 export const toWebId=(id:string)=>id.replace(/@s\.whatsapp\.net$/,'@c.us');
 export const fromWebId=(id:string)=>id.replace(/@c\.us$/,'@s.whatsapp.net');
@@ -38,6 +39,9 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     });
   } catch(error){stopped=true;await lease.end().catch(()=>{});throw error;}
   const check=()=>{if(stopped||!ready)throw new Error('WhatsApp Web desligado.');};
+  const groupOperation=async<T>(operation:()=>Promise<T>):Promise<T>=>{
+    try{return await operation();}catch(error){if(!stopped&&lostWebContext(error))reportClose(false);throw error;}
+  };
   const group=async(id:string)=>{
     check();if(!id.endsWith('@g.us'))throw new Error('Grupo inválido.');
     // getChatById serializes unrelated chat/message state and can fail in IndexedDB.
@@ -71,7 +75,7 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
       if(result){const status=webReceipt(result.ack);if(status!==undefined)options.receipt(result.id._serialized,status);}
       return result?{key:{id:result.id._serialized}}:undefined;},
     async fetchReceipt(id){check();const message=await client.getMessageById(id);return message?webReceipt(message.ack)??null:null;},
-    async groupMetadata(id){return metadata(await group(id));},
+    async groupMetadata(id){return groupOperation(async()=>metadata(await group(id)));},
     async groupFetchAllParticipating(){
       check();
       // Read only group identifiers and names. getChats serializes every private
@@ -87,7 +91,7 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     },
     async groupInviteCode(id){return (await group(id)).getInviteCode();},
     async groupParticipantsUpdate(id,participants){
-      const results=await (await group(id)).addParticipants(participants.map(toWebId),{autoSendInviteV4:false});
+      const results=await groupOperation(async()=>(await group(id)).addParticipants(participants.map(toWebId),{autoSendInviteV4:false}));
       if(typeof results==='string')throw new Error(results.includes('no admin rights')?'O número ligado não é administrador do grupo.':'WhatsApp Web recusou a operação de adicionar ao grupo.');
       return participants.map(p=>({status:String(results[toWebId(p)]?.code??0)}));
     },

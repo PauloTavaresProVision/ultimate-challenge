@@ -15,6 +15,7 @@ import { handleParticipation, participationIntent } from './substitutions.ts';
 import { queueWelcome } from './welcome.ts';
 import { disconnectPolicy } from './whatsapp-disconnect.ts';
 import { joinApprovedPlayer } from './group-join.ts';
+import {recoverGroupEntry} from './group-recovery.ts';
 import makeWASocket, {
   jidNormalizedUser,
   type WASocket,
@@ -586,7 +587,9 @@ export class WhatsApp {
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({
           where: { id: row.id },
-          data: { status: !attempted && (error instanceof DeliveryPaused || this.socket !== socket || this.status !== 'connected') ? 'pending' : 'uncertain' },
+          data: recoverGroupEntry(row.kind,stage,row.attempts,error)
+            ? {status:'pending',nextAttemptAt:new Date(Date.now()+30000)}
+            : { status: !attempted && (error instanceof DeliveryPaused || this.socket !== socket || this.status !== 'connected') ? 'pending' : 'uncertain' },
         });
       }
     } finally {

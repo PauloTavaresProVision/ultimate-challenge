@@ -15,12 +15,15 @@ try{
  for(const name of ['whatsapp-zapi.ts','zapi-client.ts','zapi-settings.ts','whatsapp.ts','whatsapp-web.ts','whatsapp-browser-lock.ts','whatsapp-web-error.ts','whatsapp-pause.ts','delivery-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
- import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';
+ import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import WWebJS from 'whatsapp-web.js';
  import {openWebWhatsApp,toWebId,fromWebId,webReceipt} from './src/whatsapp-web.ts';
  import {loadPostgresAuth} from './src/whatsapp-postgres-auth.ts';import {config} from './src/config.ts';import {WhatsApp} from './src/whatsapp.ts';import {db} from './src/db.ts';
  const received=[],receipts=[],joins=[],sent=[];let destroyed=0,closed=0,ready=0;
  const group={isGroup:true,id:{_serialized:'123@g.us'},name:'Torneio',participants:[{id:{_serialized:'111@lid'}}],getInviteCode:async()=>'invite',addParticipants:async(ids,opts)=>{assert.equal(opts.autoSendInviteV4,false);return {[ids[0]]:{code:200}};}};
  const fake=new EventEmitter();Object.assign(fake,{info:{wid:{_serialized:'244900000001@c.us'},pushname:'Bot'},initialize:async()=>fake.emit('ready'),pupBrowser:{isConnected:()=>destroyed===0},destroy:async()=>{destroyed++;},getChats:async()=>[group],getChatById:async()=>group,getContactLidAndPhone:async()=>[{lid:'111@lid',pn:'244900000002@c.us'}],sendMessage:async(id,text,opts)=>{sent.push({id,text,opts});return {id:{_serialized:'unique-message'}};}});
+ fake.getChatById=async()=>{throw new Error('IndexedDB DataError: full chat serialization must not run');};
+ WWebJS.GroupChat.prototype.addParticipants=group.addParticipants;
+ WWebJS.GroupChat.prototype.getInviteCode=group.getInviteCode;
  const options={databaseUrl:config.DATABASE_URL,folder:'/tmp/web-profile',qr:()=>{},ready:()=>ready++,closed:()=>closed++,message:m=>received.push(m),receipt:(id,status)=>receipts.push({id,status}),joined:(id,members)=>joins.push({id,members})};
  let socket;
  try {
@@ -29,13 +32,16 @@ try{
  fake.getMessageById=async id=>id==='cached-message'?{ack:3}:null;
  assert.equal(await socket.fetchReceipt('cached-message'),4);
  assert.equal(await socket.fetchReceipt('unknown-message'),null);
- fake.pupPage={evaluate:async fn=>{
+ fake.pupPage={evaluate:async (fn,id)=>{
   const previous=globalThis.require;
-  globalThis.require=name=>{assert.equal(name,'WAWebCollections');return {Chat:{getModelsArray:()=>[
+  globalThis.require=name=>{
+   if(name==='WAWebWidFactory')return {createWid:value=>value};
+   if(name==='WAWebGroupQueryJob')return {queryAndUpdateGroupMetadataById:async()=>{}};
+   assert.equal(name,'WAWebCollections');return {Chat:{get:()=>({name:'Torneio',groupMetadata:{subject:'Torneio',participants:{serialize:()=>group.participants}}}),getModelsArray:()=>[
    {id:{_serialized:'123@g.us'},name:'Torneio'},
    {id:{_serialized:'456@c.us'},get name(){throw Error('Private chat must not be read');}}
   ]}};};
-  try{return fn();}finally{globalThis.require=previous;}
+  try{return await fn(id);}finally{globalThis.require=previous;}
  }};
  assert.deepEqual(await socket.groupFetchAllParticipating(),{'123@g.us':{id:'123@g.us',subject:'Torneio',participants:[]}});
  await assert.rejects(loadPostgresAuth({connectionString:config.DATABASE_URL,encryptionKey:config.MESSAGE_KEY,folder:'/tmp/unused',onFailure:()=>{}}),/outro processo/);

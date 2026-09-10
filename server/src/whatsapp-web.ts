@@ -38,7 +38,24 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     });
   } catch(error){stopped=true;await lease.end().catch(()=>{});throw error;}
   const check=()=>{if(stopped||!ready)throw new Error('WhatsApp Web desligado.');};
-  const group=async(id:string)=>{check();const chat=await client.getChatById(toWebId(id));if(!chat.isGroup)throw new Error('Grupo inválido.');return chat as GroupChat;};
+  const group=async(id:string)=>{
+    check();if(!id.endsWith('@g.us'))throw new Error('Grupo inválido.');
+    // getChatById serializes unrelated chat/message state and can fail in IndexedDB.
+    // Keep the library's GroupChat methods, with only the metadata they require.
+    const data=await client.pupPage!.evaluate(async groupId=>{
+      const w=globalThis as unknown as {require:(name:string)=>any};
+      const wid=w.require('WAWebWidFactory').createWid(groupId);
+      const chats=w.require('WAWebCollections').Chat;
+      const chat=chats.get(wid)||await chats.find(wid);
+      if(!chat)throw new Error('Grupo não encontrado no WhatsApp.');
+      await w.require('WAWebGroupQueryJob').queryAndUpdateGroupMetadataById({id:groupId});
+      if(!chat.groupMetadata?.participants)throw new Error('Participantes do grupo indisponíveis.');
+      return {id:{_serialized:groupId},formattedTitle:chat.groupMetadata.subject??chat.name??groupId,isGroup:true,
+        groupMetadata:{participants:chat.groupMetadata.participants.serialize().map((p:{id:{_serialized:string}})=>({id:{_serialized:p.id._serialized}}))}};
+    },id);
+    const Group=(WWebJS as unknown as {GroupChat:new(client:WebClient,data:unknown)=>GroupChat}).GroupChat;
+    return new Group(client,data);
+  };
   const pn=async(id:string)=>{
     if(!id.endsWith('@lid'))return fromWebId(id);
     const mapped=await client.getContactLidAndPhone([id]);

@@ -14,5 +14,5 @@ export async function joinApprovedPlayer(socket: Pick<MessagingSocket,'groupMeta
     if(fresh.participants.some(p=>[p.id,p.phoneNumber].some(jid=>jid && normalize(jid)===normalize(phoneJid))))return 'already_member' as const;
     return 'invite' as const;
   }
-  throw new Error('Não foi possível confirmar a entrada no grupo.');
+  throw new Error('Não foi possível confirmar a entrada no grupo. Código: '+String(result?.status??'ausente'));
 }

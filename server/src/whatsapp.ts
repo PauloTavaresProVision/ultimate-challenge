@@ -518,6 +518,7 @@ export class WhatsApp {
       const row = await claimDelivery();
       if (!row) return;
       let attempted = false;
+      let stage = 'preparar';
       const ready = async () => {
         if(await automaticPaused())throw new DeliveryPaused('Envios automáticos pausados.');
         if (this.socket !== socket || this.status !== 'connected') throw new Error('Ligação interrompida antes do envio.');
@@ -536,15 +537,19 @@ export class WhatsApp {
           }
           await ready();
           attempted = true;
+          stage = 'adicionar-participante';
           const outcome=await joinApprovedPlayer(socket,payload.group,row.recipient);
+          stage = 'preparar-boas-vindas';
           if(outcome==='added'||outcome==='already_member')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite') {
             // Resolve the fallback only in the worker. Approval must not wait for WhatsApp.
+            stage = 'obter-link';
             const code = await socket.groupInviteCode(payload.group);
             if (!code) throw new Error('Não foi possível obter o convite do grupo.');
             const text = `Olá ${player.name}, a tua inscrição no Ultimate Challenge foi aprovada! Divisão: ${player.division}. Entra no grupo: https://chat.whatsapp.com/${code}`;
             const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
             await ready();
+            stage = 'enviar-link';
             await socket.sendMessage(recipient,{text});
           }
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
@@ -569,6 +574,13 @@ export class WhatsApp {
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
       } catch (error) {
+        if(row.kind==='group_join') {
+          const message=error instanceof Error?error.message:String(error);
+          const reason=/não é administrador|no admin rights/i.test(message)?'sem-permissao-admin':/timeout|timed out/i.test(message)?'timeout':/Evaluation failed/i.test(message)?'erro-whatsapp-web':/Código: (\d+|ausente)/.exec(message)?.[0]??'erro-interno';
+          console.error('WhatsApp entrada:',row.id,stage,reason);
+          const value=encrypt(JSON.stringify({stage,message:message.slice(0,4000)}),config.MESSAGE_KEY);
+          await db.setting.upsert({where:{key:'outbox-diagnostic:'+row.id},create:{key:'outbox-diagnostic:'+row.id,value},update:{value}});
+        }
         if(row.kind==='invitation') await finishInvitation();
         const code = (error as { output?: { statusCode?: number } })?.output?.statusCode;
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');

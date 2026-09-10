@@ -71,7 +71,7 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     async groupInviteCode(id){return (await group(id)).getInviteCode();},
     async groupParticipantsUpdate(id,participants){
       const results=await (await group(id)).addParticipants(participants.map(toWebId),{autoSendInviteV4:false});
-      if(typeof results==='string')throw new Error('Entrada no grupo não confirmada.');
+      if(typeof results==='string')throw new Error(results.includes('no admin rights')?'O número ligado não é administrador do grupo.':'WhatsApp Web recusou a operação de adicionar ao grupo.');
       return participants.map(p=>({status:String(results[toWebId(p)]?.code??0)}));
     },
     end(){

@@ -1,3 +1,4 @@
+import InviteReminderDialog from './invite-reminder-dialog';
 import {useEffect,useState,useRef} from 'react';
 import {api} from './whatsapp-live';
 import {Button} from './ui/button';
@@ -11,6 +12,7 @@ export default function InviteHistory({connected}:{connected:boolean}){
   const [data,setData]=useState<{items:Item[];total:number}>({items:[],total:0});
   const [offset,setOffset]=useState(0),[search,setSearch]=useState(''),[filter,setFilter]=useState('all');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[note,setNote]=useState(''),[loading,setLoading]=useState(true);
+  const [reminderOpen,setReminderOpen]=useState(false);
   const requests=useRef(new Map<string,string>());
   const url='/admin/invite-history?offset='+offset+'&search='+encodeURIComponent(search)+'&filter='+filter;
   useEffect(()=>{
@@ -31,6 +33,7 @@ export default function InviteHistory({connected}:{connected:boolean}){
   return <section className="invite-list" aria-labelledby="invite-list-title">
     <header className="invite-list-header"><h2 id="invite-list-title">Convites enviados <span>{data.total}</span></h2>
       <div className="invite-list-tools">
+        <Button variant="outline" disabled={!connected} onClick={()=>setReminderOpen(true)}>Lembrar quem não se inscreveu</Button>
         <Input aria-label="Pesquisar contacto pelo número" placeholder="Pesquisar número…" value={search} onChange={e=>{setSearch(e.target.value);setOffset(0);}}/>
         <select aria-label="Filtrar inscrições" value={filter} onChange={e=>{setFilter(e.target.value);setOffset(0);}}><option value="all">Todos</option><option value="pending">Aguardam inscrição</option><option value="registered">Com inscrição</option></select>
       </div>
@@ -49,5 +52,6 @@ export default function InviteHistory({connected}:{connected:boolean}){
     {data.items.some(i=>['sent','accepted'].includes(i.delivery))&&<p className="invite-list-note">* Entrega ainda não confirmada pelo WhatsApp.</p>}
     {data.total>50&&<footer className="invite-list-pages"><span>{offset+1}–{Math.min(offset+50,data.total)} de {data.total}</span><Button variant="ghost" disabled={!offset} onClick={()=>setOffset(offset-50)}>Anterior</Button><Button variant="ghost" disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Seguinte</Button></footer>}
     {error&&<p role="alert" className="form-error">{error}</p>}{note&&<p role="status" className="invite-list-note">{note}</p>}
+    <InviteReminderDialog open={reminderOpen} connected={connected} onClose={()=>setReminderOpen(false)} onSent={setNote}/>
   </section>;
 }

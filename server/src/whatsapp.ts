@@ -1,3 +1,4 @@
+import {reminderStillEligible} from './invite-reminders.ts';
 import {openWebWhatsApp} from './whatsapp-web.ts';
 import {openZApi} from './whatsapp-zapi.ts';
 import {automaticPaused,DeliveryPaused} from './whatsapp-pause.ts';
@@ -556,14 +557,17 @@ export class WhatsApp {
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;
         }
-        if(row.kind==='invitation') await finishInvitation();
+        if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
         const content = row.kind === 'ai' ? decodeBotMessage(body) : {text:body};
         await ready();
+        if(row.kind==='invitation_reminder'&&!await reminderStillEligible(row.recipient)){
+          await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
+        }
         attempted = true;
         const result = await socket.sendMessage(recipient, content);
-        if(row.kind==='invitation') await finishInvitation();
+        if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
         await db.setting.upsert({
           where: { key: `outbox-message:${row.id}` },
@@ -582,7 +586,7 @@ export class WhatsApp {
           const value=encrypt(JSON.stringify({stage,message:message.slice(0,4000)}),config.MESSAGE_KEY);
           await db.setting.upsert({where:{key:'outbox-diagnostic:'+row.id},create:{key:'outbox-diagnostic:'+row.id,value},update:{value}});
         }
-        if(row.kind==='invitation') await finishInvitation();
+        if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const code = (error as { output?: { statusCode?: number } })?.output?.statusCode;
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
         await db.outbox.update({

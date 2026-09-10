@@ -7,13 +7,13 @@ export async function claimDelivery(now=new Date()){
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('invitation-delivery'))`;
   if((await tx.setting.findUnique({where:{key:pauseKey}}))?.value==='true')return null;
   const state=await tx.setting.findUnique({where:{key}});
-  const inFlight=await tx.outbox.count({where:{kind:'invitation',status:'sending'}});
+  const inFlight=await tx.outbox.count({where:{kind:{in:['invitation','invitation_reminder']},status:'sending'}});
   const paused=!!inFlight||!!state&&Number(state.value)>now.getTime();
-  const row=await tx.outbox.findFirst({where:{status:'pending',expiresAt:{gt:now},nextAttemptAt:{lte:now},...(paused?{kind:{not:'invitation'}}:{})},orderBy:[{createdAt:'asc'},{id:'asc'}]});
+  const row=await tx.outbox.findFirst({where:{status:'pending',expiresAt:{gt:now},nextAttemptAt:{lte:now},...(paused?{kind:{notIn:['invitation','invitation_reminder']}}:{})},orderBy:[{createdAt:'asc'},{id:'asc'}]});
   if(!row)return null;
   const claim=await tx.outbox.updateMany({where:{id:row.id,status:'pending'},data:{status:'sending',attempts:{increment:1}}});
   if(!claim.count)return null;
-  if(row.kind==='invitation')await tx.setting.upsert({where:{key},create:{key,value:String(now.getTime()+invitationIntervalMs)},update:{value:String(now.getTime()+invitationIntervalMs)}});
+  if(['invitation','invitation_reminder'].includes(row.kind))await tx.setting.upsert({where:{key},create:{key,value:String(now.getTime()+invitationIntervalMs)},update:{value:String(now.getTime()+invitationIntervalMs)}});
   return row;
  });
 }

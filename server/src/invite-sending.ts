@@ -1,3 +1,4 @@
+import {reminderCandidates} from './invite-reminders.ts';
 import type { Express, RequestHandler } from 'express';
 import {deliveryStatus} from './delivery-status.ts';
 import { z } from 'zod';
@@ -31,6 +32,27 @@ export function installInviteSending(app: Express, auth: RequestHandler, admin: 
       return result;
     },{timeout:20000});
     res.json({batchId:input.batchId,recipients:rows});
+  });
+  app.get('/api/admin/invite-reminders',auth,admin,async(_req,res)=>{
+    res.set('Cache-Control','no-store').json({items:await reminderCandidates()});
+  });
+  app.post('/api/admin/invite-reminders',auth,admin,async(req,res)=>{
+    const input=z.object({batchId:z.string().uuid(),invitationIds:z.array(z.string().uuid()).min(1).max(5000),message:z.string().trim().min(1).max(1500)}).parse(req.body);
+    const result=await db.$transaction(async tx=>{
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('invite-reminders'))`;
+      const key='invite-reminder-batch:'+input.batchId;
+      const existing=await tx.setting.findUnique({where:{key}});
+      if(existing)return JSON.parse(existing.value);
+      if(!connected())throw Object.assign(new Error('Liga o WhatsApp antes de enviar os lembretes.'),{status:409});
+      const selected=new Set(input.invitationIds);
+      const candidates=(await reminderCandidates()).filter(r=>selected.has(r.id));
+      for(const row of candidates)await tx.outbox.create({data:{kind:'invitation_reminder',recipient:row.phone.slice(1)+'@s.whatsapp.net',encryptedBody:encrypt(input.message,config.MESSAGE_KEY),expiresAt:new Date(Date.now()+7*86400000)}});
+      const result={queued:candidates.length,excluded:selected.size-candidates.length};
+      await tx.setting.create({data:{key,value:JSON.stringify(result)}});
+      await tx.audit.create({data:{actor:res.locals.session.adminId,action:`Lembrete de inscrição colocado na fila para ${result.queued} contactos.`}});
+      return result;
+    },{timeout:60000});
+    res.json(result);
   });
   app.get('/api/admin/invite-history',auth,admin,async(req,res)=>{
     const offset=z.coerce.number().int().min(0).max(100000).parse(req.query.offset??0);

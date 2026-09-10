@@ -108,7 +108,6 @@ export function installAdminState(
           bad('Publica os quatro jogos da ronda em conjunto.');
       }
     }
-    let invite: string | null = null;
     const targetGroup = await db.setting.findUnique({where:{key:"whatsapp_group"}});
     const prior = await db.player.findMany();
     const approvals = data.players.filter(
@@ -116,7 +115,7 @@ export function installAdminState(
         p.status === 'Ativo' &&
         prior.find((o) => o.id === p.id)?.status === 'Pendente',
     );
-    if (approvals.length) invite = await wa.groupInvite();
+    if (approvals.length && !targetGroup?.value) bad('Associa primeiro o grupo do torneio nas configurações do WhatsApp.');
     await db.$transaction(async (tx) => {
       const lock = await tx.revision.updateMany({
         where: { id: 1, value: data.revision },
@@ -165,13 +164,13 @@ export function installAdminState(
           create: { id, ...fields, birth: new Date(p.birth) },
           update: { ...fields, birth: new Date(p.birth) },
         });
-        if (old?.status === 'Pendente' && p.status === 'Ativo' && invite)
+        if (old?.status === 'Pendente' && p.status === 'Ativo')
           await tx.outbox.create({
             data: {
               recipient: `${p.phone.slice(1)}@s.whatsapp.net`,
               kind: 'group_join',
               encryptedBody: encrypt(
-                JSON.stringify({playerId:p.id,group:targetGroup!.value,text:`Olá ${p.name}, a tua inscrição no Ultimate Challenge foi aprovada! Divisão: ${p.division}. Entra no grupo: ${invite}`}),
+                JSON.stringify({playerId:p.id,group:targetGroup!.value}),
                 config.MESSAGE_KEY,
               ),
               expiresAt: new Date(Date.now() + 86400000),

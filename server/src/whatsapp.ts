@@ -528,7 +528,7 @@ export class WhatsApp {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }
         if(row.kind === 'group_join') {
-          const payload=JSON.parse(decrypt(row.encryptedBody,config.MESSAGE_KEY)) as {playerId:string;group:string;text:string};
+          const payload=JSON.parse(decrypt(row.encryptedBody,config.MESSAGE_KEY)) as {playerId:string;group:string;text?:string};
           const player=await db.player.findUnique({where:{id:payload.playerId}});
           const currentGroup=await db.setting.findUnique({where:{key:'whatsapp_group'}});
           if(!player || player.status!=='Ativo' || !player.verified || currentGroup?.value!==payload.group) {
@@ -539,9 +539,13 @@ export class WhatsApp {
           const outcome=await joinApprovedPlayer(socket,payload.group,row.recipient);
           if(outcome==='added'||outcome==='already_member')await queueWelcome(payload.group,[row.recipient]);
           if(outcome==='invite') {
+            // Resolve the fallback only in the worker. Approval must not wait for WhatsApp.
+            const code = await socket.groupInviteCode(payload.group);
+            if (!code) throw new Error('Não foi possível obter o convite do grupo.');
+            const text = `Olá ${player.name}, a tua inscrição no Ultimate Challenge foi aprovada! Divisão: ${player.division}. Entra no grupo: https://chat.whatsapp.com/${code}`;
             const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
             await ready();
-            await socket.sendMessage(recipient,{text:payload.text});
+            await socket.sendMessage(recipient,{text});
           }
           await db.outbox.update({where:{id:row.id},data:{status:outcome==='invite'?'invited':outcome,sentAt:new Date(),encryptedBody:''}});
           return;

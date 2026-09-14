@@ -181,13 +181,14 @@ export default function Journeys({
           if (!busy) setOpen(v);
         }}
       >
-        <DialogContent className="draw-dialog">
+        <DialogContent className="draw-dialog journey-dialog">
           <DialogTitle>Abrir inscrições no grupo</DialogTitle>
           <DialogDescription>
             Os jogadores respondem “quero entrar”. Ao esgotarem as vagas, entram
             em lista de espera.
           </DialogDescription>
-          <div className="draw-dialog-body draw-fields">
+          <div className="draw-dialog-body journey-form">
+            <div className="journey-fields">
             <label>
               Divisão
               <select
@@ -248,7 +249,8 @@ export default function Journeys({
                 ))}
               </select>
             </label>
-            <div className="draw-courts">
+            </div>
+            <div className="draw-courts journey-courts">
               {courts
                 .filter((c) => c.active)
                 .map((c) => (
@@ -281,20 +283,14 @@ export default function Journeys({
               rows={5}
               maxLength={1500}
               onChange={(e) => setMessage(e.target.value)}
-              style={{
-                width: '100%',
-                border: '1px solid #d8e2df',
-                borderRadius: 12,
-                padding: 12,
-                resize: 'vertical',
-              }}
+              className="journey-message-editor"
             />
             <p>
               Variáveis: {'{divisao}'} · {'{data}'} · {'{hora}'} · {'{vagas}'} ·{' '}
               {'{local}'}. As instruções e o código são acrescentados
               automaticamente.
             </p>
-            <details open>
+            <details className="journey-message-preview">
               <summary>Pré-visualização da mensagem</summary>
               <p style={{ whiteSpace: 'pre-wrap' }}>
                 {journeyAnnouncement(message, {

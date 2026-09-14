@@ -9,5 +9,5 @@ test('Unknown targets, malformed output and provider failures cannot trigger reg
  for(const response of [reply({action:'join',journeyId:'invented'}),reply({action:'delete',journeyId:'one'}),new Response('secret-key',{status:500})])await assert.rejects(interpretParticipation('secret-key','oi',{},['one'],async()=>response),e=>e instanceof Error&&!e.message.includes('secret-key'));
 });
 test('Unclear requests and unrelated conversation remain non-mutating decisions',async()=>{
- for(const action of ['clarify','none'] as const)assert.deepEqual(await interpretParticipation('fake','talvez',{},['one'],async()=>reply({action,journeyId:null})),{action,journeyId:null});
+ for(const action of ['clarify','none','silent'] as const)assert.deepEqual(await interpretParticipation('fake','talvez',{},['one'],async()=>reply({action,journeyId:null})),{action,journeyId:null});
 });

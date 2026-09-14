@@ -59,6 +59,7 @@ export async function handleJourney(
   decision?: JourneyDecision,
 ) {
   const action = decision?.action ?? journeyIntent(text);
+  if (action==='silent') return true;
   if (!action||action==='none') return false;
   return db.$transaction(
     async (tx) => {

@@ -100,6 +100,7 @@ export async function handleJourneyConversation(
           },
           journeys.map((j) => j.id),
         );
+        if (decision.action === 'silent') return true;
         if (decision.action === 'none') {
           await db.setting.deleteMany({ where: { key: memoryKey } });
           return false;

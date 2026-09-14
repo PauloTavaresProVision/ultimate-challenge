@@ -1,3 +1,7 @@
+import {
+  defaultJourneyMessage,
+  journeyAnnouncement,
+} from '../lib/journey-message';
 import { useEffect, useState, useRef } from 'react';
 import { api } from './whatsapp-live';
 import { Button } from './ui/button';
@@ -37,6 +41,7 @@ export default function Journeys({
     [time, setTime] = useState(calendar['M1+'].time),
     [capacity, setCapacity] = useState(12),
     [fields, setFields] = useState<string[]>([]);
+  const [message, setMessage] = useState(defaultJourneyMessage);
   const batch = useRef('');
   const refresh = () => api<Journey[]>('/admin/journeys').then(setItems);
   useEffect(() => {
@@ -67,6 +72,7 @@ export default function Journeys({
         time,
         capacity,
         courtIds: fields,
+        message,
       });
       setOpen(false);
       await refresh();
@@ -90,7 +96,9 @@ export default function Journeys({
               .replaceAll('-', '')
               .slice(0, 12);
             setError('');
-            setDate(calendar[division].date);setTime(calendar[division].time);
+            setDate(calendar[division].date);
+            setTime(calendar[division].time);
+            setMessage(defaultJourneyMessage);
             setOpen(true);
           }}
         >
@@ -265,10 +273,49 @@ export default function Journeys({
               Premier Padel Club · {fields.length}/{capacity / 4} campos
               selecionados
             </p>
+            <label htmlFor="journey-message">Mensagem para o grupo</label>
+            <textarea
+              id="journey-message"
+              value={message}
+              disabled={busy}
+              rows={5}
+              maxLength={1500}
+              onChange={(e) => setMessage(e.target.value)}
+              style={{
+                width: '100%',
+                border: '1px solid #d8e2df',
+                borderRadius: 12,
+                padding: 12,
+                resize: 'vertical',
+              }}
+            />
+            <p>
+              Variáveis: {'{divisao}'} · {'{data}'} · {'{hora}'} · {'{vagas}'} ·{' '}
+              {'{local}'}. As instruções e o código são acrescentados
+              automaticamente.
+            </p>
+            <details open>
+              <summary>Pré-visualização da mensagem</summary>
+              <p style={{ whiteSpace: 'pre-wrap' }}>
+                {journeyAnnouncement(message, {
+                  id: batch.current,
+                  division,
+                  date,
+                  time,
+                  capacity,
+                })}
+              </p>
+            </details>
             {error && <p className="form-error">{error}</p>}
           </div>
           <Button
-            disabled={busy || fields.length !== capacity / 4 || !date || !time}
+            disabled={
+              busy ||
+              !message.trim() ||
+              fields.length !== capacity / 4 ||
+              !date ||
+              !time
+            }
             onClick={() => void create()}
           >
             {busy ? 'A abrir…' : 'Abrir e anunciar no grupo'}

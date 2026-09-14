@@ -1,3 +1,4 @@
+import {defaultJourneyMessage,journeyAnnouncement} from '../../lib/journey-message.ts';
 import type { Player, Game } from '../../lib/tournament.ts';
 import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
@@ -175,6 +176,7 @@ export function installJourneys(
         time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
         capacity: z.number().int().min(8).max(200).multipleOf(4),
         courtIds: z.array(z.string()).min(2),
+        message: z.string().trim().min(1).max(1500).default(defaultJourneyMessage),
       })
       .parse(req.body);
     res.json(
@@ -237,7 +239,7 @@ export function installJourneys(
         const message = await notice(
           tx,
           j,
-          `🎾 ${j.division} — inscrições abertas\n${j.date} às ${j.time} · Premier Padel Club\n${j.capacity} vagas\nResponde a esta mensagem com “quero entrar”. Para desistir: “quero sair”.\nJornada ${j.id}`,
+          journeyAnnouncement(input.message,j),
         );
         j.announcementId = message.id;
         await save(tx, j);

@@ -10,11 +10,11 @@ try{
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
  for(const name of ['journeys.ts','bot-message.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
- for(const name of ['journey.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
+ for(const name of ['journey.ts','journey-message.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  console.log(docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import express from 'express';
- import {db} from './src/db.ts';import {installJourneys,handleJourney} from './src/journeys.ts';
+ import {db} from './src/db.ts';import {decrypt} from './src/security.ts';import {config} from './src/config.ts';import {installJourneys,handleJourney} from './src/journeys.ts';
  const app=express();app.use(express.json());const auth=(_q,_s,n)=>n();installJourneys(app,auth,auth);app.use((e,q,s,n)=>s.status(e.status??500).json({error:e.message}));
  const server=app.listen(0);await new Promise(r=>server.once('listening',r));const url='http://127.0.0.1:'+server.address().port+'/api/admin/journeys';
  const post=async(path,body={})=>{const r=await fetch(url+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();assert.equal(r.status,200,JSON.stringify(data));return data;};
@@ -23,7 +23,8 @@ try{
  await db.setting.create({data:{key:'whatsapp_group',value:'123@g.us'}});
  for(let i=0;i<2;i++)await db.court.create({data:{id:'c'+i,name:'Court '+i,location:'Club',active:true}});
  for(let i=0;i<10;i++)await db.player.create({data:{id:'p'+i,name:'Player '+i,phone:'+2449000000'+String(i).padStart(2,'0'),birth:new Date('1990-01-01'),division:'M1',side:i%2?'Direita':'Esquerda',status:'Ativo',verified:true}});
- const j=await post('',{id:'abcdef123456',division:'M1',date:'2099-01-06',time:'18:00',capacity:8,courtIds:['c0','c1']});
+ const j=await post('',{id:'abcdef123456',division:'M1',date:'2099-01-06',time:'18:00',capacity:8,courtIds:['c0','c1'],message:'Vamos jogar {divisao}! {vagas} vagas.'});
+ assert.ok(decrypt((await db.outbox.findUnique({where:{id:j.announcementId}})).encryptedBody,config.MESSAGE_KEY).startsWith('Vamos jogar M1! 8 vagas.'));
  await db.setting.create({data:{key:'outbox-message:'+j.announcementId,value:'zapi:test-instance:quoted-announcement'}});
  const phone=i=>'+2449000000'+String(i).padStart(2,'0');
  await Promise.all(Array.from({length:9},(_,i)=>handleJourney('123@g.us',phone(i),'quero entrar','event'+i,'quoted-announcement')));

@@ -27,7 +27,7 @@ try{
  assert.ok(decrypt((await db.outbox.findUnique({where:{id:j.announcementId}})).encryptedBody,config.MESSAGE_KEY).startsWith('Vamos jogar M1! 8 vagas.'));
  await db.setting.create({data:{key:'outbox-message:'+j.announcementId,value:'zapi:test-instance:quoted-announcement'}});
  const phone=i=>'+2449000000'+String(i).padStart(2,'0');
- await Promise.all(Array.from({length:9},(_,i)=>handleJourney('123@g.us',phone(i),'quero entrar','event'+i,'quoted-announcement')));
+ await Promise.all(Array.from({length:9},(_,i)=>handleJourney('123@g.us',phone(i),'estou in','event'+i,'quoted-announcement',{action:'join',journeyId:j.id})));
  const read=async()=>JSON.parse((await db.setting.findUnique({where:{key:'journey:'+j.id}})).value);
  let state=await read();assert.equal(state.confirmed.length,8);assert.equal(state.waiting.length,1);
  await handleJourney('123@g.us',phone(0),'quero entrar','event0','quoted-announcement');assert.equal((await read()).confirmed.length,8);

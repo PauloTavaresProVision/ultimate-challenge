@@ -16,15 +16,16 @@ test('Custom announcement substitutes all values and preserves mandatory instruc
     'Vamos jogar!\n{divisao}: {data} {hora}, {vagas} vagas no {local}.',
     j,
   );
-  assert.equal(
-    text,
-    'Vamos jogar!\nM1: 15/09/2026 18:00, 12 vagas no Premier Padel Club.\n\nPara garantires a tua vaga, responde a esta mensagem com “quero entrar”.\nSe depois não puderes vir, responde com “quero sair”.',
-  );
+  assert.ok(text.startsWith('Vamos jogar!\nM1: 15/09/2026 18:00, 12 vagas no Premier Padel Club.'));
+  assert.ok(text.includes('«quero entrar»'));
+  assert.ok(text.includes('«quero sair»'));
+  assert.ok(text.includes('Os jogos e os campos serão anunciados após o sorteio.'));
+
 });
 test('Default template and repeated placeholders render without evaluating arbitrary text', () => {
   assert.ok(
     journeyAnnouncement(defaultJourneyMessage, j).includes(
-      'M1 — vamos jogar?',
+      'Ultimate Challenge • M1',
     ),
   );
   assert.ok(

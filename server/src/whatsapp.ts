@@ -1,5 +1,4 @@
-import {handleJourney} from './journeys.ts';
-import {journeyIntent} from '../../lib/journey.ts';
+import {handleJourneyConversation} from './journey-conversation.ts';
 import {reminderStillEligible} from './invite-reminders.ts';
 import {openWebWhatsApp} from './whatsapp-web.ts';
 import {openZApi} from './whatsapp-zapi.ts';
@@ -363,28 +362,18 @@ export class WhatsApp {
             const first = this.seen.keys().next().value;
             if (first) this.seen.delete(first);
           }
-          if(journeyIntent(text)) {
-            void (async()=>{
-              const group=message.key.remoteJid??'';
-              if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
-              let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
-              if(!phone){const metadata=await sock.groupMetadata(group);phone=phoneFromJid(metadata.participants.find(p=>p.id===message.key.participant)?.phoneNumber);}
-              if(phone)await handleJourney(group,phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined);
-            })().catch(()=>console.error('Não foi possível registar a participação na jornada.'));
-            continue;
-          }
-          if(participationIntent(text)) {
-            const phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
-            if(phone)void handleParticipation(message.key.remoteJid??'',phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined).catch(()=>console.error('Não foi possível processar a participação.'));
-            continue;
-          }
           if(!/^\/escada(?:\s|$)/i.test(text)) {
             void (async()=>{
               const group=message.key.remoteJid??'';
               if(!await botEnabled()||(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
               let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
               if(!phone){const metadata=await sock.groupMetadata(group);const member=metadata.participants.find(p=>p.id===message.key.participant);phone=phoneFromJid(member?.phoneNumber);}
-              if(phone)await handleAI(group,phone,text,id);
+              if(phone){
+                const quoted=message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined;
+                if(await handleJourneyConversation(group,phone,text,id,quoted))return;
+                if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
+                await handleAI(group,phone,text,id);
+              }
             })().catch(()=>console.error('Não foi possível processar a pergunta do grupo.'));
             continue;
           }

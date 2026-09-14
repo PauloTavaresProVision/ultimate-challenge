@@ -1,3 +1,4 @@
+import type {JourneyDecision} from './journey-ai.ts';
 import {defaultJourneyMessage,journeyAnnouncement} from '../../lib/journey-message.ts';
 import type { Player, Game } from '../../lib/tournament.ts';
 import type { Express, RequestHandler } from 'express';
@@ -15,7 +16,7 @@ const fail = (m: string): never => {
 const lock = async (tx: Prisma.TransactionClient) => {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('journeys'))`;
 };
-async function list(tx: Prisma.TransactionClient = db) {
+export async function listJourneys(tx: Prisma.TransactionClient = db) {
   return (
     await tx.setting.findMany({ where: { key: { startsWith: 'journey:' } } })
   ).map((r) => JSON.parse(r.value) as Journey);
@@ -55,9 +56,10 @@ export async function handleJourney(
   text: string,
   eventId: string,
   quotedId?: string,
+  decision?: JourneyDecision,
 ) {
-  const action = journeyIntent(text);
-  if (!action) return false;
+  const action = decision?.action ?? journeyIntent(text);
+  if (!action||action==='none') return false;
   return db.$transaction(
     async (tx) => {
       await lock(tx);
@@ -69,14 +71,15 @@ export async function handleJourney(
       const event = 'journey-event:' + digest(group + ':' + eventId);
       if (await tx.setting.findUnique({ where: { key: event } })) return true;
       const player = await tx.player.findUnique({ where: { phone } });
-      const all = (await list(tx)).filter(
+      const all = (await listJourneys(tx)).filter(
         (j) =>
           j.group === group &&
           new Date(j.date + 'T' + j.time + ':00+01:00') > new Date(),
       );
       let choices = all.filter((j) => j.status === 'open');
       const code = /jornada\s+([a-f0-9]+)/i.exec(text)?.[1];
-      if (code) choices = all.filter((j) => j.id === code);
+      if(decision?.journeyId&&!quotedId)choices=all.filter(j=>j.id===decision.journeyId);
+      else if (code&&!decision) choices = all.filter((j) => j.id === code);
       else if (quotedId) {
         const mapping = await tx.setting.findFirst({
           where: { key: { startsWith: 'outbox-message:' }, OR:[{value:quotedId},{AND:[{value:{startsWith:'zapi:'}},{value:{endsWith:':'+quotedId}}]}] },
@@ -111,6 +114,7 @@ export async function handleJourney(
       if (!player || !player.verified || player.status !== 'Ativo')
         reply =
           'A participação exige uma inscrição aprovada na plataforma. Contacta a organização.';
+      else if(action==='clarify')reply='Queres confirmar a tua participação ou cancelar? Responde ao anúncio dos jogos a que te referes.';
       else if (choices.length !== 1)
         reply =
           'Há várias inscrições abertas. Responde diretamente ao anúncio em que queres participar com “' +
@@ -162,7 +166,7 @@ export function installJourneys(
   admin: RequestHandler,
 ) {
   app.get('/api/admin/journeys', auth, admin, async (_req, res) =>
-    res.json((await list()).sort((a, b) => b.date.localeCompare(a.date))),
+    res.json((await listJourneys()).sort((a, b) => b.date.localeCompare(a.date))),
   );
   app.post('/api/admin/journeys', auth, admin, async (req, res) => {
     const input = z
@@ -179,7 +183,7 @@ export function installJourneys(
     res.json(
       await db.$transaction(async (tx) => {
         await lock(tx);
-        const existing = (await list(tx)).find((j) => j.id === input.id);
+        const existing = (await listJourneys(tx)).find((j) => j.id === input.id);
         if (existing) return existing;
         if (new Date(input.date + 'T' + input.time + ':00+01:00') <= new Date())
           fail('Escolhe uma data e hora futuras.');
@@ -188,7 +192,7 @@ export function installJourneys(
         const start = minutes(input.time);
         if (start + 80 > 1440)
           fail('Os quatro jogos devem terminar no mesmo dia.');
-        const reserved = (await list(tx)).filter(
+        const reserved = (await listJourneys(tx)).filter(
           (j) => j.date === input.date && j.status !== 'drawn',
         );
         if (
@@ -248,7 +252,7 @@ export function installJourneys(
     res.json(
       await db.$transaction(async (tx) => {
         await lock(tx);
-        const j = (await list(tx)).find((j) => j.id === req.params.id);
+        const j = (await listJourneys(tx)).find((j) => j.id === req.params.id);
         if (!j || j.status !== 'open') fail('Jornada indisponível.');
         if(j!.confirmed.length<8||j!.confirmed.length%4)fail('São necessários 8, 12, 16… confirmados para fechar e sortear. Mantém as inscrições abertas.');
         j!.status = 'closed';
@@ -268,7 +272,7 @@ export function installJourneys(
       await db.$transaction(
         async (tx) => {
           await lock(tx);
-          const j = (await list(tx)).find((j) => j.id === req.params.id);
+          const j = (await listJourneys(tx)).find((j) => j.id === req.params.id);
           if (!j || j.status !== 'closed')
             fail('Fecha as inscrições antes de sortear.');
           if (

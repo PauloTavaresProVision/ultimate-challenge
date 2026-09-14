@@ -1,5 +1,5 @@
 export const defaultJourneyMessage =
-  '🎾 {divisao} — vamos jogar?\n\n📅 {data}, às {hora}\n📍 {local}\n👥 Temos {vagas} vagas!';
+  '🎾 Ultimate Challenge • {divisao}\n\nEstão abertas as inscrições para os próximos jogos!\n\n📅 {data}\n🕗 {hora}\n📍 {local}\n👥 {vagas} vagas disponíveis';
 export function journeyAnnouncement(
   template: string,
   j: {
@@ -25,6 +25,6 @@ export function journeyAnnouncement(
     );
   return (
     text +
-    '\n\nPara garantires a tua vaga, responde a esta mensagem com “quero entrar”.\nSe depois não puderes vir, responde com “quero sair”.'
+    '\n\nPara participar, responde a esta mensagem com «quero entrar». Recebes a confirmação da tua vaga ou da entrada na lista de espera.\n\nSe não puderes comparecer, responde «quero sair» para libertar a vaga.\n\n📣 Os jogos e os campos serão anunciados após o sorteio.'
   );
 }

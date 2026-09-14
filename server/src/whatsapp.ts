@@ -1,3 +1,5 @@
+import {handleJourney} from './journeys.ts';
+import {journeyIntent} from '../../lib/journey.ts';
 import {reminderStillEligible} from './invite-reminders.ts';
 import {openWebWhatsApp} from './whatsapp-web.ts';
 import {openZApi} from './whatsapp-zapi.ts';
@@ -361,6 +363,16 @@ export class WhatsApp {
             const first = this.seen.keys().next().value;
             if (first) this.seen.delete(first);
           }
+          if(journeyIntent(text)) {
+            void (async()=>{
+              const group=message.key.remoteJid??'';
+              if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+              let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
+              if(!phone){const metadata=await sock.groupMetadata(group);phone=phoneFromJid(metadata.participants.find(p=>p.id===message.key.participant)?.phoneNumber);}
+              if(phone)await handleJourney(group,phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined);
+            })().catch(()=>console.error('Não foi possível registar a participação na jornada.'));
+            continue;
+          }
           if(participationIntent(text)) {
             const phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
             if(phone)void handleParticipation(message.key.remoteJid??'',phone,text,id,message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined).catch(()=>console.error('Não foi possível processar a participação.'));
@@ -527,6 +539,7 @@ export class WhatsApp {
       };
       try {
         if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
+        if(row.kind.startsWith('journey_')&&(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient){await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }
@@ -560,7 +573,7 @@ export class WhatsApp {
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
-        const content = row.kind === 'ai' ? decodeBotMessage(body) : {text:body};
+        const content = ['ai','journey_reply'].includes(row.kind) ? decodeBotMessage(body) : {text:body};
         await ready();
         if(row.kind==='invitation_reminder'&&!await reminderStillEligible(row.recipient)){
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;

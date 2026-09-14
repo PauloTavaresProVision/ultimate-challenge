@@ -1,3 +1,4 @@
+import {installJourneys} from './journeys.ts';
 import { installAI } from './ai-bot.ts';
 import {deliveryStatus} from './delivery-status.ts';
 import {installZSettings,installZWebhook} from './zapi-settings.ts';
@@ -494,6 +495,7 @@ installAdminState(app, auth, admin, wa, snapshot);
 installOpenAI(app, auth, admin);
 installAI(app, auth, admin);
 installCalendar(app, auth, admin);
+installJourneys(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
   res.json({months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});

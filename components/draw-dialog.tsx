@@ -19,6 +19,7 @@ import { prepareDivisionDraw, type DrawPlan } from '../lib/division-draw';
 import type { RoundCalendar } from '../lib/weekly-calendar';
 export default function DrawDialog({
   initialDivision,
+  journey,
   calendar,
   players,
   courts,
@@ -28,6 +29,7 @@ export default function DrawDialog({
   onSave,
 }: {
   initialDivision: Division;
+  journey?: {date:string;time:string;courtIds:string[]};
   calendar: RoundCalendar;
   players: Player[];
   courts: Court[];
@@ -39,10 +41,11 @@ export default function DrawDialog({
   const [plan, setPlan] = useState<DrawPlan>({
     division: initialDivision,
     ...calendar[initialDivision],
-    sides: {},
-    courtIds: [],
+    sides: journey ? Object.fromEntries(players.map(p=>[p.id,p.side])) : {},
+    courtIds: journey?.courtIds.slice(0,players.length/4) ?? [],
+    ...(journey ? {date:journey.date,time:journey.time}:{}),
   });
-  const [step, setStep] = useState(0),
+  const [step, setStep] = useState(journey?1:0),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const pool = players.filter(
@@ -214,6 +217,7 @@ export default function DrawDialog({
                             <input
                               type="checkbox"
                               checked={!!plan.sides[p.id]}
+                              disabled={!!journey}
                               onChange={(e) => {
                                 const sides = { ...plan.sides };
                                 if (e.target.checked) sides[p.id] = p.side;
@@ -332,7 +336,7 @@ export default function DrawDialog({
           <Button
             variant="outline"
             disabled={busy}
-            onClick={() => (step ? setStep(step - 1) : onClose())}
+            onClick={() => ((step > (journey?1:0)) ? setStep(step - 1) : onClose())}
           >
             {step ? 'Anterior' : 'Cancelar'}
           </Button>

@@ -1,4 +1,5 @@
 'use client';
+import Journeys from './journeys';
 import DrawDialog from './draw-dialog';
 import {nextRoundCalendar,normalizeCalendar,type WeeklyCalendar,type RoundCalendar} from '../lib/weekly-calendar';
 import Substitutions from './substitutions';
@@ -753,11 +754,12 @@ export default function WorkspaceViews({
       {view === 'Rondas e sorteios' && (
         <>
           {live && <Substitutions />}
-          <section className="panel">
+          {live && <Journeys players={players} courts={courts} games={games} calendar={roundCalendar}/>}
+          {!live&&<section className="panel">
             <div className="section-heading"><div><h2>Sorteios por divisão</h2><p>Escolhe o nível, os participantes e os campos. Revê o resultado antes de publicar.</p></div>
-            <Button disabled={saving||calendarLoading||!!calendarError} onClick={()=>setDrawOpen(true)}><Shuffle size={17}/> Preparar sorteio</Button></div>
+            <Button disabled={live||saving||calendarLoading||!!calendarError} onClick={()=>setDrawOpen(true)}><Shuffle size={17}/> Preparar sorteio</Button></div>
             {calendarError&&<p className="form-error">{calendarError}</p>}
-          </section>
+          </section>}
           {drawOpen&&<DrawDialog initialDivision={divisions.includes(division as Division)?division as Division:'M1+'} calendar={roundCalendar} players={players} courts={courts} games={games} live={live} onClose={()=>setDrawOpen(false)} onSave={async(next,entry)=>{const ok=await persist({games:next},entry);if(ok){onDivisionChange?.(next[next.length-1].division);inform('Sorteio guardado em rascunho. Revê os jogos antes de publicar.');}return ok;}}/>}
           {roundGames.length > 0 && (
             <>

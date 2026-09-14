@@ -11,3 +11,10 @@ test('Unknown targets, malformed output and provider failures cannot trigger reg
 test('Unclear requests and unrelated conversation remain non-mutating decisions',async()=>{
  for(const action of ['clarify','none','silent'] as const)assert.deepEqual(await interpretParticipation('fake','talvez',{},['one'],async()=>reply({action,journeyId:null})),{action,journeyId:null});
 });
+
+test('A weekday alone cannot choose between two dates even when the model picks one',async()=>{
+ const context={division:'M1',journeys:[{id:'a',division:'M1',date:'2026-09-23'},{id:'b',division:'M1',date:'2026-09-30'}]};
+ const mock=async()=>reply({action:'join',journeyId:'a'});
+ assert.equal((await interpretParticipation('fake','quarta podem contar comigo',context,['a','b'],mock)).journeyId,null);
+ assert.equal((await interpretParticipation('fake','23/09 confirmado',context,['a','b'],mock)).journeyId,'a');
+});

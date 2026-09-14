@@ -99,7 +99,7 @@ export async function handleJourneyConversation(
         processed = handled;
         if (
           decision.action === 'clarify' ||
-          (!decision.journeyId && journeys.length > 1 && !quoted)
+          (!decision.journeyId && !quoted)
         ) {
           const value = encrypt(
             JSON.stringify({

@@ -115,9 +115,9 @@ export async function handleJourney(
         reply =
           'A participação exige uma inscrição aprovada na plataforma. Contacta a organização.';
       else if(action==='clarify')reply='Queres confirmar a tua participação ou cancelar? Responde ao anúncio dos jogos a que te referes.';
-      else if (choices.length !== 1)
+      else if (choices.length !== 1 || (decision && !decision.journeyId && !quotedId))
         reply =
-          'Há várias inscrições abertas. Responde diretamente ao anúncio em que queres participar com “' +
+          'Preciso de confirmar a jornada. Responde diretamente ao anúncio em que queres participar com “' +
           (action === 'join' ? 'quero entrar' : 'quero sair') +
           '”.\n' + choices.map(j=>`${j.division} · ${j.date.split('-').reverse().join('/')} às ${j.time}`).join('\n');
       else if (j.status !== 'open')

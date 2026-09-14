@@ -1,3 +1,4 @@
+import {resolveJourneyReference} from './journey-reference.ts';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { decrypt, encrypt, digest } from './security.ts';
@@ -60,25 +61,7 @@ export async function handleJourneyConversation(
           update: { count: { increment: 1 } },
         });
         if (rate.count > 8) throw Error();
-        const mappings = quotedId
-          ? await db.setting.findMany({
-              where: {
-                key: {
-                  in: journeys.map((j) => 'outbox-message:' + j.announcementId),
-                },
-              },
-            })
-          : [];
-        const quoted =
-          journeys.find((j) =>
-            mappings.some(
-              (m) =>
-                m.key === 'outbox-message:' + j.announcementId &&
-                (m.value === quotedId ||
-                  (m.value.startsWith('zapi:') &&
-                    m.value.endsWith(':' + quotedId))),
-            ),
-          )?.id ?? null;
+        const quoted = quotedId ? await resolveJourneyReference(db,group,quotedId,journeys) : null;
         const decision = await interpretParticipation(
           decrypt(key.value, config.MESSAGE_KEY),
           text,

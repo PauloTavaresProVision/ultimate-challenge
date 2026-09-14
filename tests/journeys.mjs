@@ -9,7 +9,7 @@ try{
  const url=new URL(source.DATABASE_URL);url.pathname='/'+database;
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
- for(const name of ['journeys.ts','bot-message.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
+ for(const name of ['journeys.ts','bot-message.ts','journey-reference.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  for(const name of ['journey.ts','journey-message.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  console.log(docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
@@ -32,6 +32,19 @@ try{
  let state=await read();assert.equal(state.confirmed.length,8);assert.equal(state.waiting.length,1);
  await handleJourney('123@g.us',phone(0),'quero entrar','event0','quoted-announcement');assert.equal((await read()).confirmed.length,8);
  const removed=state.confirmed[0],promoted=state.waiting[0];await handleJourney('123@g.us',phone(Number(removed.slice(1))),'quero sair','leave1','quoted-announcement');state=await read();assert.equal(state.confirmed.length,8);assert.ok(state.confirmed.includes(promoted));assert.equal(state.waiting.length,0);
+ const confirmation=await db.outbox.findFirst({where:{kind:'journey_reply'},orderBy:{createdAt:'desc'}});
+ await db.setting.create({data:{key:'outbox-message:'+confirmation.id,value:'zapi:test-instance:confirmation'}});
+ await handleJourney('123@g.us',phone(9),'In','reply-confirmation','confirmation',{action:'join',journeyId:null});
+ assert.ok((await read()).waiting.includes('p9'));
+ await handleJourney('123@g.us',phone(9),'quero sair','leave-confirmation','confirmation',{action:'leave',journeyId:null});
+ assert.equal((await read()).waiting.length,0);
+ await db.setting.delete({where:{key:'journey-message:'+confirmation.id}});
+ await handleJourney('123@g.us',phone(9),'In','legacy-confirmation','confirmation',{action:'join',journeyId:null});
+ assert.ok((await read()).waiting.includes('p9'));
+ await handleJourney('123@g.us',phone(9),'quero sair','legacy-leave','confirmation',{action:'leave',journeyId:null});
+ await handleJourney('123@g.us',phone(9),'In','unknown-reference','unknown',{action:'join',journeyId:j.id});
+ assert.equal((await read()).waiting.length,0);
+
  await post('/'+j.id+'/close');await handleJourney('123@g.us',phone(9),'quero entrar','closed1','quoted-announcement');assert.equal((await read()).confirmed.length,8);
  const sides=Object.fromEntries(state.confirmed.map((id,i)=>[id,i<4?'Esquerda':'Direita']));await post('/'+j.id+'/draw',{sides,courtIds:['c0','c1']});assert.equal(await db.game.count(),8);assert.equal((await read()).status,'drawn');
  console.log('PASS journeys: concurrent capacity, event deduplication, waitlist promotion, closed registration and confirmed-only draw. No messages sent.');

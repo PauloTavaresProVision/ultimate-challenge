@@ -1,3 +1,4 @@
+import {resolveJourneyReference} from './journey-reference.ts';
 import type {JourneyDecision} from './journey-ai.ts';
 import {defaultJourneyMessage,journeyAnnouncement} from '../../lib/journey-message.ts';
 import type { Player, Game } from '../../lib/tournament.ts';
@@ -33,7 +34,7 @@ async function notice(
   text: string,
   phone?: string,
 ) {
-  return tx.outbox.create({
+  const message = await tx.outbox.create({
     data: {
       recipient: j.group,
       kind: phone ? 'journey_reply' : 'journey_announcement',
@@ -49,6 +50,8 @@ async function notice(
       expiresAt: new Date(j.date + 'T' + j.time + ':00+01:00'),
     },
   });
+  await tx.setting.create({data:{key:'journey-message:'+message.id,value:j.id}});
+  return message;
 }
 export async function handleJourney(
   group: string,
@@ -82,12 +85,8 @@ export async function handleJourney(
       if(decision?.journeyId&&!quotedId)choices=all.filter(j=>j.id===decision.journeyId);
       else if (code&&!decision) choices = all.filter((j) => j.id === code);
       else if (quotedId) {
-        const mapping = await tx.setting.findFirst({
-          where: { key: { startsWith: 'outbox-message:' }, OR:[{value:quotedId},{AND:[{value:{startsWith:'zapi:'}},{value:{endsWith:':'+quotedId}}]}] },
-        });
-        choices = all.filter(
-          (j) => mapping?.key === 'outbox-message:' + j.announcementId,
-        );
+        const reference = await resolveJourneyReference(tx,group,quotedId,all);
+        choices = all.filter(j=>j.id===reference);
       }
       if (!choices.length) {
         await tx.outbox.create({
@@ -98,7 +97,7 @@ export async function handleJourney(
               JSON.stringify({
                 format: 'mentioned-reply-v1',
                 ...mentionedReply(
-                  'Não há inscrições abertas para essa jornada. Consulta a organização.',
+                  quotedId ? 'Não consegui identificar a jornada dessa mensagem. Responde ao anúncio original ou escreve a divisão e a data dos jogos.' : 'Não há inscrições abertas para essa jornada. Consulta a organização.',
                   phone,
                 ),
               }),

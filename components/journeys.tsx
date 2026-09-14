@@ -287,7 +287,7 @@ export default function Journeys({
             />
             <p>
               Variáveis: {'{divisao}'} · {'{data}'} · {'{hora}'} · {'{vagas}'} ·{' '}
-              {'{local}'}. As instruções e o código são acrescentados
+              {'{local}'}. As instruções para participar são acrescentadas
               automaticamente.
             </p>
             <details className="journey-message-preview">

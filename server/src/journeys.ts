@@ -113,12 +113,9 @@ export async function handleJourney(
           'A participação exige uma inscrição aprovada na plataforma. Contacta a organização.';
       else if (choices.length !== 1)
         reply =
-          'Qual jornada? Responde com “' +
+          'Há várias inscrições abertas. Responde diretamente ao anúncio em que queres participar com “' +
           (action === 'join' ? 'quero entrar' : 'quero sair') +
-          ' jornada CÓDIGO”.\n' +
-          choices
-            .map((j) => `${j.id}: ${j.division} · ${j.date} ${j.time}`)
-            .join('\n');
+          '”.\n' + choices.map(j=>`${j.division} · ${j.date.split('-').reverse().join('/')} às ${j.time}`).join('\n');
       else if (j.status !== 'open')
         reply =
           'As inscrições desta jornada já estão fechadas. Contacta a organização.';
@@ -150,7 +147,7 @@ export async function handleJourney(
       await notice(
         tx,
         j,
-        `${j.division} · ${j.date} ${j.time}\n${reply}`,
+        choices.length===1?`${j.division} · ${j.date.split('-').reverse().join('/')} ${j.time}\n${reply}`:reply,
         phone,
       );
       await tx.setting.create({ data: { key: event, value: 'done' } });

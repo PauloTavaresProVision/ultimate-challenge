@@ -1,5 +1,5 @@
 export const defaultJourneyMessage =
-  '🎾 {divisao} — inscrições abertas\n{data} às {hora} · {local}\n{vagas} vagas';
+  '🎾 {divisao} — vamos jogar?\n\n📅 {data}, às {hora}\n📍 {local}\n👥 Temos {vagas} vagas!';
 export function journeyAnnouncement(
   template: string,
   j: {
@@ -25,7 +25,6 @@ export function journeyAnnouncement(
     );
   return (
     text +
-    '\n\nResponde a esta mensagem com “quero entrar”. Para desistir: “quero sair”.\nJornada ' +
-    j.id
+    '\n\nPara garantires a tua vaga, responde a esta mensagem com “quero entrar”.\nSe depois não puderes vir, responde com “quero sair”.'
   );
 }

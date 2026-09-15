@@ -1,3 +1,4 @@
+import {queueCode} from './verification-queue.ts';
 import {installJourneys} from './journeys.ts';
 import { installAI } from './ai-bot.ts';
 import {deliveryStatus} from './delivery-status.ts';
@@ -12,7 +13,7 @@ import express from 'express';
 import { syncEnvironmentAdmin } from './admin-bootstrap.ts';
 import { installAdminState } from './admin-state.ts';
 import helmet from 'helmet';
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { db } from './db.ts';
@@ -229,7 +230,6 @@ const playerSchema = z.object({
   note: z.string().max(500),
 });
 app.post('/api/register', async (req, res) => {
-  await limited(`register:${req.ip}`, 10, 3600);
   if (wa.status !== 'connected')
     fail(
       503,
@@ -239,6 +239,9 @@ app.post('/api/register', async (req, res) => {
     .pick({ name: true, phone: true, birth: true, side: true, division: true })
     .extend({ invite: z.string().min(40).max(100) })
     .parse(req.body);
+  await limited(`register-phone:${digest(input.phone)}`, 10, 3600);
+  await limited(`register-invite:${digest(input.invite)}`, 10, 3600);
+  if(await automaticPaused()) fail(503, 'Os envios WhatsApp estão pausados. Contacta a organização.');
   const token = digest(input.invite);
   const id = await db.$transaction(async (tx) => {
     const invite = await tx.invite.findUnique({ where: { tokenHash: token } });
@@ -264,41 +267,18 @@ app.post('/api/register', async (req, res) => {
       where: { id: 1 },
       data: { value: { increment: 1 } },
     });
+    await queueCode(tx,p.id,p.phone);
     return p.id;
   });
-  await sendCode(id);
   res.json({ playerId: id });
 });
 async function sendCode(playerId: string) {
-  const p = await db.player.findUniqueOrThrow({ where: { id: playerId } });
-  const code = String(randomInt(100000, 1000000));
-  await db.$transaction(async (tx) => {
-    await tx.verificationCode.updateMany({
-      where: { playerId, consumedAt: null },
-      data: { consumedAt: new Date() },
-    });
-    await tx.verificationCode.create({
-      data: {
-        playerId,
-        digest: codeDigest(playerId, code, config.SESSION_SECRET),
-        expiresAt: new Date(Date.now() + 600000),
-      },
-    });
-    await tx.outbox.create({
-      data: {
-        recipient: `${p.phone.slice(1)}@s.whatsapp.net`,
-        encryptedBody: encrypt(
-          `Escada: o teu código é ${code}. Expira em 10 minutos. Não o partilhes.`,
-          config.MESSAGE_KEY,
-        ),
-        kind: 'verification',
-        expiresAt: new Date(Date.now() + 600000),
-      },
-    });
+  await db.$transaction(async tx=>{
+    const p=await tx.player.findUniqueOrThrow({where:{id:playerId}});
+    await queueCode(tx,p.id,p.phone);
   });
 }
 app.post('/api/code', async (req, res) => {
-  await limited(`code:${req.ip}`, 10);
   const { phone } = z
     .object({ phone: z.string().regex(/^\+[1-9]\d{7,14}$/) })
     .parse(req.body);
@@ -307,14 +287,15 @@ app.post('/api/code', async (req, res) => {
   if (!p) fail(404, 'Número não registado. Pede um convite à organização para fazer a inscrição.');
   if (wa.status !== 'connected')
     fail(503, 'WhatsApp desligado. Tenta mais tarde.');
-  await sendCode(p!.id);
+  if(await automaticPaused()) fail(503, 'Os envios WhatsApp estão pausados. Contacta a organização.');
+  await sendCode(p.id);
   res.json({ ok: true });
 });
 app.post('/api/verify', async (req, res) => {
-  await limited(`verify:${req.ip}`, 20);
   const { phone, code } = z
-    .object({ phone: z.string(), code: z.string().regex(/^\d{6}$/) })
+    .object({ phone: z.string().regex(/^\+[1-9]\d{7,14}$/), code: z.string().regex(/^\d{6}$/) })
     .parse(req.body);
+  await limited(`verify-phone:${digest(phone)}`, 20);
   const p = await db.player.findUnique({ where: { phone } });
   if (!p) fail(400, 'Código inválido ou expirado.');
   const result = await db.$transaction(async (tx) => {

@@ -9,7 +9,7 @@ try{
  const url=new URL(source.DATABASE_URL);url.pathname='/'+database;
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
- for(const name of ['journeys.ts','bot-message.ts','journey-reference.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
+ for(const name of ['journeys.ts','bot-message.ts','journey-reference.ts','verification-queue.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
  for(const name of ['journey.ts','journey-message.ts','journey-roster.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  console.log(docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
@@ -23,6 +23,13 @@ try{
  await db.setting.create({data:{key:'whatsapp_group',value:'123@g.us'}});
  for(let i=0;i<2;i++)await db.court.create({data:{id:'c'+i,name:'Court '+i,location:'Club',active:true}});
  for(let i=0;i<10;i++)await db.player.create({data:{id:'p'+i,name:'Player '+i,phone:'+2449000000'+String(i).padStart(2,'0'),birth:new Date('1990-01-01'),division:'M1',side:i%2?'Direita':'Esquerda',status:'Ativo',verified:true}});
+ const {queueCode}=await import('./src/verification-queue.ts');
+ await assert.rejects(db.$transaction(async tx=>{await queueCode(tx,'p0','+244900000000');throw Error('rollback');}));
+ assert.equal(await db.verificationCode.count(),0);
+ assert.equal(await db.outbox.count({where:{kind:'verification'}}),0);
+ await db.$transaction(tx=>queueCode(tx,'p0','+244900000000'));
+ assert.equal(await db.verificationCode.count(),1);
+ assert.equal(await db.outbox.count({where:{kind:'verification'}}),1);
  const j=await post('',{id:'abcdef123456',division:'M1',date:'2099-01-06',time:'18:00',capacity:8,courtIds:['c0','c1'],message:'Vamos jogar {divisao}! {vagas} vagas.'});
  assert.ok(decrypt((await db.outbox.findUnique({where:{id:j.announcementId}})).encryptedBody,config.MESSAGE_KEY).startsWith('Vamos jogar M1! 8 vagas.'));
  await db.setting.create({data:{key:'outbox-message:'+j.announcementId,value:'zapi:test-instance:quoted-announcement'}});

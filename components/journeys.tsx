@@ -43,6 +43,7 @@ export default function Journeys({
     [fields, setFields] = useState<string[]>([]);
   const [message, setMessage] = useState(defaultJourneyMessage);
   const batch = useRef('');
+  const scheduleEdited = useRef({date:false,time:false});
   const refresh = () => api<Journey[]>('/admin/journeys').then(setItems);
   useEffect(() => {
     let active = true;
@@ -96,6 +97,7 @@ export default function Journeys({
               .replaceAll('-', '')
               .slice(0, 12);
             setError('');
+            scheduleEdited.current={date:false,time:false};
             setDate(calendar[division].date);
             setTime(calendar[division].time);
             setMessage(defaultJourneyMessage);
@@ -197,8 +199,8 @@ export default function Journeys({
                 onChange={(e) => {
                   const d = e.target.value as Journey['division'];
                   setDivision(d);
-                  setDate(calendar[d].date);
-                  setTime(calendar[d].time);
+                  if(!scheduleEdited.current.date) setDate(calendar[d].date);
+                  if(!scheduleEdited.current.time) setTime(calendar[d].time);
                 }}
               >
                 {divisions.map((d) => (
@@ -212,7 +214,7 @@ export default function Journeys({
                 type="date"
                 value={date}
                 disabled={busy}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {scheduleEdited.current.date=true;setDate(e.target.value);}}
               />
             </label>
             <label>
@@ -221,7 +223,7 @@ export default function Journeys({
                 type="time"
                 value={time}
                 disabled={busy}
-                onChange={(e) => setTime(e.target.value)}
+                onChange={(e) => {scheduleEdited.current.time=true;setTime(e.target.value);}}
               />
             </label>
             <label>
@@ -304,6 +306,10 @@ export default function Journeys({
             </details>
             {error && <p className="form-error">{error}</p>}
           </div>
+          <p role="status" style={{margin:0,padding:'12px 16px',background:'#f0f6f4',borderRadius:10,color:'#173d50'}}>
+            <strong>{division} · {date ? date.split('-').reverse().join('/') : 'Escolhe a data'} às {time || '—'}</strong>
+            <br />{capacity} vagas · {fields.length} campos selecionados
+          </p>
           <Button
             disabled={
               busy ||

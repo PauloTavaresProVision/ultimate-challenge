@@ -204,7 +204,7 @@ export default function Journeys({
                 }}
               >
                 {divisions.map((d) => (
-                  <option key={d}>{d}</option>
+                  <option key={d} disabled={calendar[d].enabled===false}>{d}{calendar[d].enabled===false?" · Desativada":""}</option>
                 ))}
               </select>
             </label>
@@ -313,6 +313,7 @@ export default function Journeys({
           <Button
             disabled={
               busy ||
+              calendar[division].enabled===false ||
               !message.trim() ||
               fields.length !== capacity / 4 ||
               !date ||

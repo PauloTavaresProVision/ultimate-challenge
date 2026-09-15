@@ -1,7 +1,7 @@
 import {divisions, weeklySchedule, type Division, type Game, type Court, type draw} from './tournament.ts';
 
-export type WeeklyCalendar = {divisions:Record<Division,{weekday:number;time:string}>};
-export type RoundCalendar = Record<Division,{date:string;time:string}>;
+export type WeeklyCalendar = {divisions:Record<Division,{weekday:number;time:string;enabled?:boolean}>};
+export type RoundCalendar = Record<Division,{date:string;time:string;enabled?:boolean}>;
 export const weekdayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 // The former shared time is retained when upgrading to division calendars.
 export function normalizeCalendar(raw?: {time?:string;divisions?:WeeklyCalendar['divisions']}|null):WeeklyCalendar {
@@ -15,13 +15,15 @@ export function nextRoundCalendar(calendar:WeeklyCalendar,games:Game[],today:str
   // Find a single week where all divisions can still play, preserving seven days per division.
   let monday=shift(anchor,-((new Date(anchor+'T12:00:00Z').getUTCDay()+6)%7));
   for(let attempt=0;attempt<54;attempt++,monday=shift(monday,7)){
-    const result=Object.fromEntries(divisions.map(d=>[d,{date:shift(monday,(calendar.divisions[d].weekday+6)%7),time:calendar.divisions[d].time}])) as RoundCalendar;
-    if(divisions.every(d=>result[d].date>=today&&games.filter(g=>g.division===d).every(g=>result[d].date>=shift(g.date,7))))return result;
+    const result=Object.fromEntries(divisions.map(d=>[d,{date:shift(monday,(calendar.divisions[d].weekday+6)%7),time:calendar.divisions[d].time,...(calendar.divisions[d].enabled===false?{enabled:false}:{})}])) as RoundCalendar;
+    if(divisions.filter(d=>calendar.divisions[d].enabled!==false).every(d=>result[d].date>=today&&games.filter(g=>g.division===d).every(g=>result[d].date>=shift(g.date,7))))return result;
   }
   throw new Error('Não foi possível encontrar uma semana disponível.');
 }
 export function scheduleDivisions(pairs:ReturnType<typeof draw>,courts:Court[],round:number,calendar:RoundCalendar):Game[]{
   const sessions=new Map<string,typeof pairs>();
-  for(const pair of pairs){const slot=calendar[pair.division];const key=slot.date+'|'+slot.time;sessions.set(key,[...(sessions.get(key)??[]),pair]);}
+  for(const pair of pairs){const slot=calendar[pair.division];if(slot.enabled===false)continue;const key=slot.date+'|'+slot.time;sessions.set(key,[...(sessions.get(key)??[]),pair]);}
   return [...sessions].flatMap(([key,pool])=>{const [date,time]=key.split('|');return weeklySchedule(pool,courts,round,date,time);});
 }
+
+export const activeCalendarDivisions=(calendar:WeeklyCalendar)=>divisions.filter(d=>calendar.divisions[d].enabled!==false);

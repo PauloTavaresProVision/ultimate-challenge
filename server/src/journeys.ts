@@ -1,3 +1,4 @@
+import {normalizeCalendar} from '../../lib/weekly-calendar.ts';
 import {journeyRoster} from '../../lib/journey-roster.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
 import type {JourneyDecision} from './journey-ai.ts';
@@ -192,6 +193,8 @@ export function installJourneys(
         await lock(tx);
         const existing = (await listJourneys(tx)).find((j) => j.id === input.id);
         if (existing) return existing;
+        const calendarRow=await tx.setting.findUnique({where:{key:'weekly-calendar'}});
+        if(normalizeCalendar(calendarRow?JSON.parse(calendarRow.value):null).divisions[input.division].enabled===false) fail('Esta divisão está desativada no calendário. Ativa-a nas configurações antes de abrir inscrições.');
         if (new Date(input.date + 'T' + input.time + ':00+01:00') <= new Date())
           fail('Escolhe uma data e hora futuras.');
         const minutes = (t: string) =>

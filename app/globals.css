@@ -2253,3 +2253,10 @@ h1 {
 .journey-card-actions:empty{display:none}
 @media(max-width:1100px){.journey-cards{grid-template-columns:1fr}}
 @media(max-width:540px){.journey-card-heading{padding:18px 16px;flex-wrap:wrap}.journey-counts{margin:0 16px 18px}.journey-roster,.journey-waiting{padding-left:16px;padding-right:16px}.journey-card-actions{padding:16px}.journey-card-actions button{width:100%}.journey-player-list li{grid-template-columns:22px minmax(0,1fr);gap:3px 8px}.journey-player-side{grid-column:2;justify-self:start}.journey-player-name{font-size:15px}}
+
+.division-calendar-row{grid-template-columns:150px minmax(150px,1fr) minmax(110px,180px)}
+.division-calendar-toggle{display:grid;gap:10px}.division-calendar-toggle strong{font-size:18px;color:#163e51}
+.division-calendar-row .division-calendar-toggle label{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.division-calendar-row .division-calendar-toggle input{width:20px;height:20px;padding:0;accent-color:#247245}
+.division-calendar-row select:disabled,.division-calendar-row input:disabled{opacity:.5}
+@media(max-width:650px){.division-calendar-row{grid-template-columns:1fr 1fr}.division-calendar-toggle{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between}}

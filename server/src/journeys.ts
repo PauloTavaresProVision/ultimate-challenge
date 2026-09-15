@@ -1,3 +1,4 @@
+import {journeyRoster} from '../../lib/journey-roster.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
 import type {JourneyDecision} from './journey-ai.ts';
 import {defaultJourneyMessage,journeyAnnouncement} from '../../lib/journey-message.ts';
@@ -111,6 +112,7 @@ export async function handleJourney(
       }
       const j = choices[0];
       let reply = '';
+      let newRegistration = false;
       if (!player || !player.verified || player.status !== 'Ativo')
         reply =
           'A participação exige uma inscrição aprovada na plataforma. Contacta a organização.';
@@ -126,6 +128,7 @@ export async function handleJourney(
       else if (player.division !== j.division)
         reply = `Esta jornada é de ${j.division}; a tua divisão é ${player.division}.`;
       else {
+        newRegistration = action === 'join' && !j.confirmed.includes(player.id) && !j.waiting.includes(player.id);
         reply = enrol(j, player.id, action);
         if (action === 'leave')
           while (j.confirmed.length < j.capacity && j.waiting.length) {
@@ -154,6 +157,10 @@ export async function handleJourney(
         choices.length===1?`${j.division} · ${j.date.split('-').reverse().join('/')} ${j.time}\n${reply}`:reply,
         phone,
       );
+      if(newRegistration){
+        const roster=await tx.player.findMany({where:{id:{in:[...j.confirmed,...j.waiting]}},select:{id:true,name:true}});
+        await notice(tx,j,journeyRoster(j,roster));
+      }
       await tx.setting.create({ data: { key: event, value: 'done' } });
       return true;
     },

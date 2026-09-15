@@ -10,7 +10,7 @@ try{
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','ultimate-webjs-test','300']);containerCreated=true;
  for(const name of ['journeys.ts','bot-message.ts','journey-reference.ts'])docker(['cp','server/src/'+name,container+':/app/server/src/'+name]);
- for(const name of ['journey.ts','journey-message.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
+ for(const name of ['journey.ts','journey-message.ts','journey-roster.ts','division-draw.ts','tournament.ts'])docker(['cp','lib/'+name,container+':/app/lib/'+name]);
  docker(['exec',container,'npm','run','db:migrate']);
  console.log(docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],String.raw`
  import assert from 'node:assert/strict';import express from 'express';
@@ -30,6 +30,19 @@ try{
  await Promise.all(Array.from({length:9},(_,i)=>handleJourney('123@g.us',phone(i),'estou in','event'+i,'quoted-announcement',{action:'join',journeyId:j.id})));
  const read=async()=>JSON.parse((await db.setting.findUnique({where:{key:'journey:'+j.id}})).value);
  let state=await read();assert.equal(state.confirmed.length,8);assert.equal(state.waiting.length,1);
+ const publications=()=>db.outbox.count({where:{kind:'journey_announcement'}});
+ assert.equal(await publications(),10); // opening + nine new registrations
+ await handleJourney('123@g.us',phone(0),'estou in','duplicate-new-event','quoted-announcement',{action:'join',journeyId:j.id});
+ assert.equal(await publications(),10);
+ const roster=await db.outbox.findFirst({where:{kind:'journey_announcement',id:{not:j.announcementId}},orderBy:{createdAt:'desc'}});
+ const rosterText=decrypt(roster.encryptedBody,config.MESSAGE_KEY);
+ assert.match(rosterText,/Lista de espera/);assert.match(rosterText,/8 de 8 vagas/);
+ assert.ok(await db.setting.findUnique({where:{key:'journey-message:'+roster.id}}));
+ await db.setting.create({data:{key:'outbox-message:'+roster.id,value:'zapi:test-instance:roster'}});
+ await handleJourney('123@g.us',phone(0),'estou in','reply-to-roster','roster',{action:'join',journeyId:null});
+ assert.equal(await publications(),10);
+
+
  await handleJourney('123@g.us',phone(0),'quero entrar','event0','quoted-announcement');assert.equal((await read()).confirmed.length,8);
  const removed=state.confirmed[0],promoted=state.waiting[0];await handleJourney('123@g.us',phone(Number(removed.slice(1))),'quero sair','leave1','quoted-announcement');state=await read();assert.equal(state.confirmed.length,8);assert.ok(state.confirmed.includes(promoted));assert.equal(state.waiting.length,0);
  const confirmation=await db.outbox.findFirst({where:{kind:'journey_reply'},orderBy:{createdAt:'desc'}});

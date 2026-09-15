@@ -1,3 +1,4 @@
+import {retryZApi,zApiRetryDelay} from './zapi-recovery.ts';
 import {handleJourneyConversation} from './journey-conversation.ts';
 import {reminderStillEligible} from './invite-reminders.ts';
 import {openWebWhatsApp} from './whatsapp-web.ts';
@@ -401,9 +402,10 @@ export class WhatsApp {
           const closing=Promise.resolve(previous?.end());this.closingSocket=closing;
           void closing.then(()=>{
             if(closed!==this.generation||!this.enabled)return;
-            if(revoked||startupError){this.enabled=false;return;}
+            if(revoked||(startupError && !(this.engine==='zapi' && retryZApi(startupError)))){this.enabled=false;return;}
+            if(this.engine==='zapi'){this.status='disconnected';this.lastError='Z-API temporariamente desligada. A recuperar automaticamente a ligação.';}
             this.failures=Math.min(this.failures+1,8);
-            this.timer=setTimeout(()=>{this.timer=null;if(closed===this.generation&&this.enabled)void this.open();},Math.min(60000,2000*2**this.failures));
+            this.timer=setTimeout(()=>{this.timer=null;if(closed===this.generation&&this.enabled)void this.open();},zApiRetryDelay(this.failures));
           }).catch(()=>{if(closed===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível encerrar o navegador anterior.';}}).finally(()=>{if(this.closingSocket===closing)this.closingSocket=null;});
         },
         message:message=>{if(generation===this.generation&&this.enabled)this.handleMessages([message]);},
@@ -412,7 +414,14 @@ export class WhatsApp {
       });
       if(generation!==this.generation||!this.enabled){await sock.end();return;}
       this.socket=sock;
-    }catch{if(generation===this.generation){this.enabled=false;this.status='error';this.lastError=this.engine==='zapi'?'Não foi possível iniciar a Z-API. Verifica as credenciais, o domínio HTTPS e se já existe outra ligação ativa.':'Não foi possível iniciar o WhatsApp Web. Verifica o navegador e se já existe outra ligação ativa.';}}
+    }catch(e){if(generation===this.generation){
+      if(this.engine==='zapi' && this.enabled && retryZApi(e instanceof Error?e.message:'unknown')){
+        this.status='disconnected';this.lastError='Z-API temporariamente indisponível. A recuperar automaticamente a ligação.';
+        this.failures=Math.min(this.failures+1,8);
+        this.timer=setTimeout(()=>{this.timer=null;if(generation===this.generation&&this.enabled)void this.open();},zApiRetryDelay(this.failures));
+        return;
+      }
+      this.enabled=false;this.status='error';this.lastError=this.engine==='zapi'?'Não foi possível iniciar a Z-API. Verifica as credenciais, o domínio HTTPS e se já existe outra ligação ativa.':'Não foi possível iniciar o WhatsApp Web. Verifica o navegador e se já existe outra ligação ativa.';}}
   }
   async disconnect() {
     this.stopping = true;

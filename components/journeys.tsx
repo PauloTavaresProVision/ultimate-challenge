@@ -105,42 +105,40 @@ export default function Journeys({
           Abrir inscrições
         </Button>
       </div>
+      <div className="journey-cards">
       {items.map((j) => (
-        <article
-          key={j.id}
-          style={{ padding: '16px 0', borderTop: '1px solid #dde5e2' }}
-        >
-          <strong>
-            {j.division} · {j.date} · {j.time}
-          </strong>
-          <p>
-            {j.confirmed.length}/{j.capacity} confirmados · {j.waiting.length}{' '}
-            em espera ·{' '}
-            {j.status === 'open'
-              ? 'Inscrições abertas'
-              : j.status === 'closed'
-                ? 'Inscrições fechadas'
-                : 'Sorteado'}
-          </p>
-          <details>
-            <summary>Ver participantes</summary>
-            <p>
-              Confirmados:{' '}
-              {j.confirmed
-                .map(
-                  (id) => players.find((p) => p.id === id)?.name ?? 'Jogador',
-                )
-                .join(', ') || 'Ainda sem participantes'}
-            </p>
-            <p>
-              Em espera:{' '}
-              {j.waiting
-                .map(
-                  (id) => players.find((p) => p.id === id)?.name ?? 'Jogador',
-                )
-                .join(', ') || 'Ninguém'}
-            </p>
-          </details>
+        <article key={j.id} className="journey-card">
+          <header className="journey-card-heading">
+            <div><h3>{j.division}</h3><p>{j.date.split('-').reverse().join('/')} <span>às {j.time}</span></p></div>
+            <span className={`journey-status journey-status-${j.status}`}>
+              {j.status === 'open' ? 'Inscrições abertas' : j.status === 'closed' ? 'Inscrições fechadas' : 'Sorteado'}
+            </span>
+          </header>
+          <div className="journey-counts">
+            <div><strong>{j.confirmed.length}<small>/{j.capacity}</small></strong><span>Confirmados</span></div>
+            <div><strong>{Math.max(0,j.capacity-j.confirmed.length)}</strong><span>Vagas livres</span></div>
+            <div><strong>{j.waiting.length}</strong><span>Em espera</span></div>
+          </div>
+          <div className="journey-roster">
+            <h4>Jogadores confirmados <span>{j.confirmed.length}</span></h4>
+            {j.confirmed.length ? <ol className="journey-player-list">
+              {j.confirmed.map((id,index)=>{const player=players.find(p=>p.id===id);return <li key={id}>
+                <span className="journey-player-number">{String(index+1).padStart(2,'0')}</span>
+                <span className="journey-player-name">{player?.name ?? 'Jogador indisponível'}</span>
+                {player && <span className="journey-player-side">{player.side}</span>}
+              </li>;})}
+            </ol> : <p className="journey-empty">Ainda não há jogadores confirmados.</p>}
+          </div>
+          <div className="journey-waiting">
+            <h4>Lista de espera <span>{j.waiting.length}</span></h4>
+            {j.waiting.length ? <ol className="journey-player-list">
+              {j.waiting.map((id,index)=><li key={id}>
+                <span className="journey-player-number">{index+1}</span>
+                <span className="journey-player-name">{players.find(p=>p.id===id)?.name ?? 'Jogador indisponível'}</span>
+              </li>)}
+            </ol> : <p className="journey-empty">Ninguém em espera.</p>}
+          </div>
+          <footer className="journey-card-actions">
           {j.status === 'open' && (
             <Button
               disabled={busy}
@@ -163,8 +161,10 @@ export default function Journeys({
           {j.status === 'closed' && (
             <Button onClick={() => setSelected(j)}>Sortear confirmados</Button>
           )}
+          </footer>
         </article>
       ))}
+      </div>
       {!items.length && (
         <p>
           Ainda não há jornadas. A mensagem de abertura será enviada ao grupo.

@@ -35,6 +35,17 @@ try{
  assert.deepEqual(JSON.parse(decrypt(queued[0].encryptedBody,config.MESSAGE_KEY)),{playerId:p.id,group:'123@g.us'});
  assert.equal((await put()).status,409);assert.equal(await db.outbox.count(),1);
  body.revision=1;assert.equal((await put()).status,200);assert.equal(await db.outbox.count(),1,'Saving again must not enqueue duplicate entry');
+ const pending=await db.player.create({data:{name:'Manual Player',phone:'+244900000002',birth:new Date('1990-01-01'),side:'Direita',division:'M1',status:'Rejeitado',verified:false,note:'Acidental'}});
+ const manual=body=>fetch('http://127.0.0.1:'+server.address().port+'/api/admin/players/'+pending.id+'/validate-manually',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ assert.notEqual((await manual({phone:pending.phone,confirmed:false})).status,200);
+ assert.equal((await manual({phone:p.phone,confirmed:true})).status,400);
+ assert.equal((await db.player.findUnique({where:{id:pending.id}})).verified,false);
+ assert.equal((await manual({phone:pending.phone,confirmed:true})).status,200);
+ assert.equal((await manual({phone:pending.phone,confirmed:true})).status,200);
+ assert.equal((await db.player.findUnique({where:{id:pending.id}})).verified,true);
+ assert.equal((await db.player.findUnique({where:{id:pending.id}})).status,'Rejeitado');
+ assert.equal(await db.outbox.count(),1,'Validation alone must not approve or send messages');
+ assert.equal(await db.audit.count({where:{action:{contains:'Validou manualmente'}}}),1);
  console.log('PASS: approval commits without WhatsApp, entry queued atomically, stale/repeated requests do not duplicate. No messages sent.');
  }finally{await new Promise(r=>server.close(r));await db.$disconnect();}
  `).trim());

@@ -57,6 +57,18 @@ export function installAdminState(
   wa: WhatsApp,
   snapshot: () => Promise<unknown>,
 ) {
+  app.post('/api/admin/players/:id/validate-manually',auth,admin,async(req,res)=>{
+    const input=z.object({phone:z.string().regex(/^\+[1-9]\d{7,14}$/),confirmed:z.literal(true)}).strict().parse(req.body);
+    await db.$transaction(async tx=>{
+      await tx.revision.update({where:{id:1},data:{value:{increment:1}}});
+      const p=await tx.player.findUnique({where:{id:String(req.params.id)}});
+      if(!p||p.phone!==input.phone)bad('A ficha mudou. Atualiza antes de validar.');
+      if(p!.verified)return;
+      await tx.player.update({where:{id:p!.id},data:{verified:true}});
+      await tx.audit.create({data:{actor:res.locals.session.adminId,action:`Validou manualmente o WhatsApp de ${p!.name} (${p!.phone}), sem código.`}});
+    });
+    res.json({ok:true});
+  });
   app.put('/api/admin/state', auth, admin, async (req, res) => {
     const data = stateSchema.parse(req.body);
     for (const records of [data.players, data.courts, data.games])

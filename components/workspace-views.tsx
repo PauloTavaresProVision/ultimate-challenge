@@ -193,6 +193,7 @@ export default function WorkspaceViews({
     return()=>{if(editingRef)editingRef.current=false;};
   },[editingRef,editPlayer,editCourt,editGame,drawOpen]);
   const [error, setError] = useState('');
+  const [manualBusy,setManualBusy]=useState(false);
   const [notice, setNotice] = useState('');
   const [message, setMessage] = useState('');
 
@@ -253,8 +254,8 @@ export default function WorkspaceViews({
       (status === 'Todos' ||
         (status === 'Confirmados' ? !!g.winner : !g.winner)),
   );
-  async function playerAction(action: 'save' | 'approve' | 'reject') {
-    if (saving) return;
+  async function playerAction(action: 'save' | 'approve' | 'reject' | 'restore') {
+    if (saving || manualBusy) return;
     if (!editPlayer) return;
     const p = {
       ...editPlayer,
@@ -293,14 +294,15 @@ export default function WorkspaceViews({
     }
     if (action === 'approve') p.status = 'Ativo';
     if (action === 'reject') p.status = 'Rejeitado';
+    if (action === 'restore') {p.status='Pendente';p.note='';}
     if (!p.id) p.id = crypto.randomUUID();
     if (live && onSavePlayers) {
       const next = players.some(x => x.id === p.id) ? players.map(x => x.id === p.id ? p : x) : [...players,p];
-      const entry = `${p.name}: ${action === 'approve' ? 'inscrição aprovada' : action === 'reject' ? 'inscrição rejeitada' : 'dados guardados'}.`;
+      const entry = `${p.name}: ${action === 'approve' ? 'inscrição aprovada' : action === 'reject' ? 'inscrição rejeitada' : action === 'restore' ? 'rejeição revertida; inscrição pendente' : 'dados guardados'}.`;
       try {
         await onSavePlayers(next,[entry,...audit]);
         setEditPlayer(null);
-        setNotice(action === 'approve' ? 'Inscrição aprovada. Pedido de entrada no grupo colocado na fila do WhatsApp.' : action === 'reject' ? 'Inscrição rejeitada e guardada.' : 'Dados do jogador guardados.');
+        setNotice(action === 'approve' ? 'Inscrição aprovada. Pedido de entrada no grupo colocado na fila do WhatsApp.' : action === 'reject' ? 'Inscrição rejeitada e guardada.' : action === 'restore' ? 'Inscrição recuperada. Reabre a ficha para aprovar a entrada.' : 'Dados do jogador guardados.');
       } catch(e) { setError((e as Error).message); }
       return;
     }
@@ -310,7 +312,7 @@ export default function WorkspaceViews({
         : [...list, p],
     );
     log(
-      `${p.name}: ${action === 'approve' ? 'inscrição aprovada' : action === 'reject' ? 'inscrição rejeitada' : 'dados guardados'}.`,
+      `${p.name}: ${action === 'approve' ? 'inscrição aprovada' : action === 'reject' ? 'inscrição rejeitada' : action === 'restore' ? 'rejeição revertida; inscrição pendente' : 'dados guardados'}.`,
     );
     setEditPlayer(null);
     inform(
@@ -995,7 +997,7 @@ export default function WorkspaceViews({
       <Dialog
         open={!!editPlayer}
         onOpenChange={(open) => {
-          if (saving) return;
+          if (saving || manualBusy) return;
           if (!open) {
             setEditPlayer(null);
             setError('');
@@ -1078,6 +1080,19 @@ export default function WorkspaceViews({
                   <Badge tone={editPlayer.verified ? 'green' : 'amber'}>
                     {editPlayer.verified ? 'Validado' : 'Por validar'}
                   </Badge>
+                  {live && editPlayer.id && !editPlayer.verified && <>
+                    <p style={{fontSize:13}}>O código ainda não foi confirmado. Se já confirmaste que o número pertence ao jogador, podes validá-lo manualmente.</p>
+                    <Button type="button" variant="outline" disabled={saving || manualBusy} onClick={async()=>{
+                      const original=players.find(p=>p.id===editPlayer.id);
+                      if(JSON.stringify(original)!==JSON.stringify(editPlayer)){setError('Guarda primeiro as alterações da ficha e volta a abri-la para validar o número.');return;}
+                      if(!window.confirm(`Confirmas que ${editPlayer.phone} pertence a ${editPlayer.name}? Esta ação valida o WhatsApp sem código e fica registada.`))return;
+                      setManualBusy(true);
+                      try{
+                        await api('/admin/players/'+editPlayer.id+'/validate-manually','POST',{phone:editPlayer.phone,confirmed:true});
+                        window.location.reload();
+                      }catch(e){setError((e as Error).message);setManualBusy(false);}
+                    }}>Validar WhatsApp manualmente</Button>
+                  </>}
                 </Field>
                 <Field label="Nota interna / motivo da rejeição">
                   <Input
@@ -1109,26 +1124,29 @@ export default function WorkspaceViews({
                 </p>
               )}
               <div className="dialog-actions">
+                {editPlayer.id && editPlayer.status==='Rejeitado' && <Button type="button" disabled={saving || manualBusy} onClick={()=>{
+                  if(window.confirm('Recuperar esta inscrição rejeitada? Voltará a ficar pendente de aprovação.'))void playerAction('restore');
+                }}>Recuperar inscrição</Button>}
                 {editPlayer.id && editPlayer.status === 'Pendente' && (
                   <>
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={saving}
+                      disabled={saving || manualBusy}
                       onClick={() => playerAction('reject')}
                     >
                       Rejeitar
                     </Button>
                     <Button
                       type="button"
-                      disabled={saving || !editPlayer.verified}
+                      disabled={saving || manualBusy || !editPlayer.verified}
                       onClick={() => playerAction('approve')}
                     >
                       <Check size={16} /> {saving ? 'A guardar…' : 'Aprovar entrada'}
                     </Button>
                   </>
                 )}
-                <Button type="submit" variant="outline" disabled={saving}>
+                <Button type="submit" variant="outline" disabled={saving || manualBusy}>
                   Guardar dados
                 </Button>
               </div>
@@ -1196,7 +1214,7 @@ export default function WorkspaceViews({
                 </p>
               )}
               <div className="dialog-actions">
-                <Button type="submit" disabled={saving}>{saving ? "A guardar…" : "Guardar campo"}</Button>
+                <Button type="submit" disabled={saving || manualBusy}>{saving ? "A guardar…" : "Guardar campo"}</Button>
               </div>
             </form>
           )}
@@ -1326,7 +1344,7 @@ export default function WorkspaceViews({
                 </p>
               )}
               <div className="dialog-actions">
-                <Button type="submit" disabled={saving}>{saving ? "A guardar…" : "Guardar jogo"}</Button>
+                <Button type="submit" disabled={saving || manualBusy}>{saving ? "A guardar…" : "Guardar jogo"}</Button>
               </div>
             </form>
           )}

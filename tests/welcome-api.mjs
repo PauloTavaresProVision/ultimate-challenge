@@ -11,6 +11,7 @@ try{
  const env={...source,DATABASE_URL:url.toString(),WA_AUTO_CONNECT:'false'};
  docker(['run','-d','--name',container,'--network','escada_default',...Object.entries(env).flatMap(([k,v])=>['-e',k+'='+v]),'--entrypoint','sleep','escada-app','300']);containerCreated=true;
  docker(['cp','server/src/welcome.ts',container+':/app/server/src/welcome.ts']);
+ docker(['cp','server/src/welcome-message.ts',container+':/app/server/src/welcome-message.ts']);
  docker(['exec',container,'npm','run','db:migrate']);
  const output=docker(['exec','-i',container,'node','--import','tsx','--input-type=module'],`
  import assert from 'node:assert/strict';import {queueWelcome,welcomeText,retryWelcome} from './src/welcome.ts';import {db} from './src/db.ts';import {decrypt} from './src/security.ts';import {config} from './src/config.ts';

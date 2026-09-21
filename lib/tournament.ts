@@ -1,3 +1,4 @@
+import {forbiddenPartnership} from './pairing-restrictions.ts';
 export const divisions = ['M1+', 'M1', 'M2+', 'M2'] as const;
 export type Division = (typeof divisions)[number];
 export type Player = {
@@ -188,7 +189,7 @@ export function draw(
     function pair(index: number, remaining: Player[]): string[][] | null {
       if (index === left.length) return [];
       for (const r of shuffle(remaining, rng)) {
-        if (forbidden.has([left[index].id, r.id].sort().join('|'))) continue;
+        if (forbiddenPartnership(left[index],r) || forbidden.has([left[index].id, r.id].sort().join('|'))) continue;
         const rest = pair(
           index + 1,
           remaining.filter((p) => p.id !== r.id),
@@ -200,7 +201,7 @@ export function draw(
     const pairs = pair(0, right);
     if (!pairs)
       throw new Error(
-        `${division}: não existe sorteio válido sem repetir parceiros da semana anterior.`,
+        `${division}: não existe sorteio válido respeitando as restrições de duplas e os parceiros da semana anterior.`,
       );
     const teams = shuffle(pairs, rng);
     for (let i = 0; i < teams.length; i += 2)

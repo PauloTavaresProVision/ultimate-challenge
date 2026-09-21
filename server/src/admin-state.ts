@@ -1,3 +1,4 @@
+import {forbiddenPartnership} from '../../lib/pairing-restrictions.ts';
 import { vacancies } from './substitutions.ts';
 import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
@@ -194,6 +195,15 @@ export function installAdminState(
         await tx.court.upsert({ where: { id }, create: c, update: fields });
       }
       const oldGames = await tx.game.findMany();
+      for(const g of data.games){
+        const previous=oldGames.find(old=>old.id===g.id);
+        if(previous && JSON.stringify(previous.a)===JSON.stringify(g.a) && JSON.stringify(previous.b)===JSON.stringify(g.b) && previous.division===g.division)continue;
+        for(const team of [g.a,g.b]){
+          const [a,b]=team.map(id=>data.players.find(p=>p.id===id));
+          if(a&&b&&forbiddenPartnership({...a,division:g.division},{...b,division:g.division}))bad('Sérgio Vieira e Ivo Guilherme Rêgo não podem formar dupla em M1+.');
+        }
+      }
+
       for(const v of (await vacancies(tx)).filter(v=>v.status==='pending')) {
         for(const id of v.gameIds) {
           const old=oldGames.find(g=>g.id===id), next=data.games.find(g=>g.id===id);

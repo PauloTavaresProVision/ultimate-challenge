@@ -110,3 +110,15 @@ test('preserves another division and detects occupied courts', () => {
     /ocupado/,
   );
 });
+
+test('M1+ restricted players never partner, including side overrides and varied draws',()=>{
+ const pool=players.map((p,i)=>({...p,name:i===0?'Sérgio Vieira':i===6?'Ivo Guilherme Rêgo':p.name}));
+ for(let seed=1;seed<=30;seed++){
+  let state=seed;
+  const rng=()=>{state=(state*1664525+1013904223)>>>0;return state/4294967296;};
+  const {generated}=prepareDivisionDraw(plan,pool,courts,[],rng);
+  for(const g of generated)for(const pair of [g.a,g.b])assert.ok(!(pair.includes('p0')&&pair.includes('p6')));
+  assert.equal(generated.filter(g=>[...g.a,...g.b].includes('p0')).length,4);
+  assert.equal(generated.filter(g=>[...g.a,...g.b].includes('p6')).length,4);
+ }
+});

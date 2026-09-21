@@ -5,7 +5,6 @@ import { config } from './config.ts';
 import { decrypt, encrypt, digest } from './security.ts';
 import { interpretParticipation } from './journey-ai.ts';
 import { listJourneys, handleJourney } from './journeys.ts';
-import { mentionedReply } from './bot-message.ts';
 const serial = new Map<string, Promise<unknown>>();
 export async function handleJourneyConversation(
   group: string,
@@ -26,7 +25,7 @@ export async function handleJourneyConversation(
           j.group === group &&
           new Date(j.date + 'T' + j.time + ':00+01:00') > new Date(),
       );
-      if (!journeys.length) return false;
+
       if (
         await db.setting.findUnique({
           where: { key: 'journey-event:' + digest(group + ':' + eventId) },
@@ -68,6 +67,7 @@ export async function handleJourneyConversation(
           decrypt(key.value, config.MESSAGE_KEY),
           text,
           {
+            authorName: player.name,
             division: player.division,
             today: new Date().toISOString(),
             quotedJourney: quoted,
@@ -86,7 +86,10 @@ export async function handleJourneyConversation(
           journeys.map((j) => j.id),
         );
         if (!await botEnabled()) return true;
-        if (decision.action === 'silent') return true;
+        if (decision.action === 'silent') {
+          await db.setting.deleteMany({where:{key:memoryKey}});
+          return true;
+        }
         if (decision.action === 'none') {
           await db.setting.deleteMany({ where: { key: memoryKey } });
           return false;
@@ -121,23 +124,7 @@ export async function handleJourneyConversation(
         return handled;
       } catch {
         if (processed || !await botEnabled()) return true;
-        await db.outbox.create({
-          data: {
-            recipient: group,
-            kind: 'journey_reply',
-            encryptedBody: encrypt(
-              JSON.stringify({
-                format: 'mentioned-reply-v1',
-                ...mentionedReply(
-                  'Não consegui interpretar a mensagem agora. Não alterei a tua inscrição. Tenta novamente dentro de instantes.',
-                  phone,
-                ),
-              }),
-              config.MESSAGE_KEY,
-            ),
-            expiresAt: new Date(Date.now() + 300000),
-          },
-        });
+        console.error('Não foi possível classificar a mensagem do grupo; nenhuma resposta automática preparada.');
         return true;
       }
     });

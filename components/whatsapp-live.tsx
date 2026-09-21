@@ -1,3 +1,4 @@
+import AIResponseControl from './ai-response-control';
 import InviteDialog from './invite-dialog';
 import ZApiSettings from './zapi-settings';
 import InviteHistory from './invite-history';
@@ -91,6 +92,7 @@ export default function WhatsAppLive() {
     {error && <div className="form-error" role="alert">{error}</div>}
     {state.lastError && <p className="form-error" role="status">{state.lastError}</p>}
     {state.warning && <p role="status">{state.warning}</p>}
+    <AIResponseControl />
     <section className="wa-card" aria-label="Envios automáticos">
       <header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div>
         <h2>{state.automaticPaused ? 'Envios automáticos pausados' : 'Envios automáticos ativos'}</h2>

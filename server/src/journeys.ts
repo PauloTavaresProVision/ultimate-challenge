@@ -69,6 +69,7 @@ export async function handleJourney(
   return db.$transaction(
     async (tx) => {
       await lock(tx);
+      if (decision && (await tx.setting.findUnique({where:{key:'bot-enabled'}}))?.value === 'false') return true;
       if (
         (await tx.setting.findUnique({ where: { key: 'whatsapp_group' } }))
           ?.value !== group

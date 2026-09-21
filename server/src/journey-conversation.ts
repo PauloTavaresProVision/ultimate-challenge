@@ -1,3 +1,4 @@
+import {botEnabled} from './ai-bot.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
 import { db } from './db.ts';
 import { config } from './config.ts';
@@ -17,6 +18,7 @@ export async function handleJourneyConversation(
   const work = (serial.get(serialKey) ?? Promise.resolve())
     .catch(() => {})
     .then(async () => {
+      if (!await botEnabled()) return true;
       const player = await db.player.findUnique({ where: { phone } });
       if (!player?.verified || player.status !== 'Ativo') return false;
       const journeys = (await listJourneys()).filter(
@@ -83,6 +85,7 @@ export async function handleJourneyConversation(
           },
           journeys.map((j) => j.id),
         );
+        if (!await botEnabled()) return true;
         if (decision.action === 'silent') return true;
         if (decision.action === 'none') {
           await db.setting.deleteMany({ where: { key: memoryKey } });
@@ -117,7 +120,7 @@ export async function handleJourneyConversation(
         } else await db.setting.deleteMany({ where: { key: memoryKey } });
         return handled;
       } catch {
-        if (processed) return true;
+        if (processed || !await botEnabled()) return true;
         await db.outbox.create({
           data: {
             recipient: group,

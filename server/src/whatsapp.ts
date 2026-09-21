@@ -576,6 +576,9 @@ export class WhatsApp {
         if(row.kind==='invitation_reminder'&&!await reminderStillEligible(row.recipient)){
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }
+        if(['ai','journey_reply'].includes(row.kind)&&!await botEnabled()){
+          await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
+        }
         attempted = true;
         const result = await socket.sendMessage(recipient, content);
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();

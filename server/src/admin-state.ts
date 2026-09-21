@@ -247,6 +247,22 @@ export function installAdminState(
           update: { ...fields, courtId: court },
         });
       }
+      // Keep the drawn journey roster in step with replacements in its draft games.
+      const drawnJourneys = await tx.setting.findMany({where:{key:{startsWith:'journey:'}}});
+      for (const row of drawnJourneys) {
+        const journey = JSON.parse(row.value);
+        if (journey.status !== 'drawn') continue;
+        const before = oldGames.filter(g=>g.division===journey.division&&g.date===journey.date);
+        const after = data.games.filter(g=>before.some(old=>old.id===g.id));
+        if (!before.length||before.some(g=>g.published)||after.length!==before.length) continue;
+        const oldIds = new Set(before.flatMap(g=>[...g.a,...g.b]));
+        const newIds = new Set(after.flatMap(g=>[...g.a,...g.b]));
+        if (oldIds.size!==newIds.size||journey.confirmed.length!==oldIds.size||journey.confirmed.some((id:string)=>!oldIds.has(id))) continue;
+        if ([...oldIds].every(id=>newIds.has(id))) continue;
+        journey.confirmed = [...journey.confirmed.filter((id:string)=>newIds.has(id)), ...[...newIds].filter(id=>!oldIds.has(id))];
+        journey.waiting = journey.waiting.filter((id:string)=>!newIds.has(id));
+        await tx.setting.update({where:{key:row.key},data:{value:JSON.stringify(journey)}});
+      }
       const published = data.games.filter(
         (g) => g.published && !oldGames.find((x) => x.id === g.id)?.published,
       );

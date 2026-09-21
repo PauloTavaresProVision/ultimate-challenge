@@ -1,3 +1,4 @@
+import DraftSubstitution from './draft-substitution';
 'use client';
 import Journeys from './journeys';
 import DrawDialog from './draw-dialog';
@@ -782,6 +783,7 @@ export default function WorkspaceViews({
                     : 'Finalizar demonstração'}
                 </Button>
               </div>
+              <DraftSubstitution games={games} players={players} visible={roundGames} disabled={!!saving} onSave={async(next,entry)=>{const ok=await persist({games:next},entry);if(ok)inform('Substituição guardada nos quatro jogos. O sorteio continua em rascunho.');return ok;}} />
               <div className="games-grid">
                 {roundGames
                   .filter(

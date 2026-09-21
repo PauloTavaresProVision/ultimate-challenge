@@ -571,7 +571,7 @@ export class WhatsApp {
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
-        const content = ['ai','journey_reply'].includes(row.kind) ? decodeBotMessage(body) : {text:body};
+        const content = ['ai','journey_reply','round'].includes(row.kind) ? decodeBotMessage(body) : {text:body};
         await ready();
         if(row.kind==='invitation_reminder'&&!await reminderStillEligible(row.recipient)){
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;

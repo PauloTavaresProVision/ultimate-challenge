@@ -1,3 +1,4 @@
+import { roundAnnouncement } from './round-announcement.ts';
 import {forbiddenPartnership} from '../../lib/pairing-restrictions.ts';
 import { vacancies } from './substitutions.ts';
 import type { Express, RequestHandler } from 'express';
@@ -257,22 +258,12 @@ export function installAdminState(
           where: { key: 'whatsapp_group' },
         });
         if (!group) bad('Associa primeiro o grupo Escada.');
-        const name = (id: string) =>
-          data.players.find((p) => p.id === id)!.name;
-        const text = `🎾 Escada · Jogos\n\n${['M1+', 'M1', 'M2+', 'M2']
-          .map((d) => {
-            const gs = published.filter((g) => g.division === d);
-            return gs.length
-              ? `${d}\n${gs.map((g) => `${g.date} · ${g.time} · ${data.courts.find((c) => c.id === g.court)!.name}\n${g.a.map(name).join(' / ')} × ${g.b.map(name).join(' / ')}`).join('\n\n')}`
-              : '';
-          })
-          .filter(Boolean)
-          .join('\n\n')}\n\nJogos: ${config.APP_ORIGIN}/jogos`;
+        const message = roundAnnouncement(published, data.players, data.courts, config.APP_ORIGIN);
         await tx.outbox.create({
           data: {
             recipient: group!.value,
             kind: 'round',
-            encryptedBody: encrypt(text, config.MESSAGE_KEY),
+            encryptedBody: encrypt(JSON.stringify(message), config.MESSAGE_KEY),
             ...window,
           },
         });

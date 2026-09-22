@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {interpretParticipation} from '../src/journey-ai.ts';
-const reply=(v:any)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({scope:v.action==='none'?'tournament_question':v.action==='silent'?'conversation':'personal_participation',...v})}]}]}));
+const reply=(v:any)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({addressedTo:'assistant',personalRequest:true,scope:v.action==='none'?'tournament_question':v.action==='silent'?'conversation':'personal_participation',...v})}]}]}));
 test('Colloquial messages are passed to OpenAI without a phrase whitelist',async()=>{
  for(const text of ['estou in','alinho','mete o meu nome','podes contar comigo','a de terça']){
  const decision=await interpretParticipation('fake',text,{history:'quero participar',quotedJourney:'one'},['one'],async(url,opts)=>{assert.equal(url,'https://api.openai.com/v1/responses');const body=JSON.parse(String(opts?.body));assert.equal(JSON.parse(body.input).message,text);assert.equal(body.store,false);assert.equal(body.text.format.strict,true);return reply({action:'join',journeyId:'one'});});assert.equal(decision.action,'join');}
@@ -43,5 +43,16 @@ test('Own informal participation remains supported, without a fixed phrase white
  for(const [text,action] of [['23/09 confirmado','join'],['estou in','join'],['afinal não consigo ir','leave']]){
   const result=await interpretParticipation('fake',text,{authorName:'Pedro'},['one'],async()=>reply({scope:'personal_participation',action,journeyId:'one'}));
   assert.equal(result.action,action);
+ }
+});
+
+test('A human addressee overrides a mistaken personal leave classification',async()=>{
+ const result=await interpretParticipation('fake','Boa noite Nelinho, não vou conseguir jogar entre pfvr 1 suplente',{},['one'],async()=>reply({scope:'personal_participation',personalRequest:true,addressedTo:'person',action:'leave',journeyId:'one'}));
+ assert.deepEqual(result,{action:'silent',journeyId:null});
+});
+test('No personal request means no registration or clarification, even with stale participation memory',async()=>{
+ for(const action of ['join','leave','clarify']){
+  const result=await interpretParticipation('fake','Amanhã faço alteração',{history:{action:'join',text:'quero entrar'}},['one'],async()=>reply({scope:'personal_participation',personalRequest:false,addressedTo:'group',action,journeyId:'one'}));
+  assert.deepEqual(result,{action:'silent',journeyId:null});
  }
 });

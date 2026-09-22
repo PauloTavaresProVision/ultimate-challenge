@@ -1,3 +1,4 @@
+import {installWallboard} from './wallboard.ts';
 import {playerStandings} from '../../lib/player-standings.ts';
 import type {Player,Game} from '../../lib/tournament.ts';
 import {queueCode} from './verification-queue.ts';
@@ -430,6 +431,7 @@ app.post('/api/admin/messages/:id/cancel', auth, admin, async (req,res) => {
   if(!cancelled.count) fail(409,'Esta mensagem já não pode ser cancelada. Atualiza o estado.');
   res.json({ok:true});
 });
+installWallboard(app);
 app.get('/api/games', auth, async (_req, res) => {
   const s = res.locals.session;
   if (!s.player?.verified || s.player.status !== 'Ativo')

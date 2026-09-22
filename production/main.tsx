@@ -1,3 +1,4 @@
+import Wallboard from './wallboard';
 import RulesPage from './rules';
 import { PlayerGames, type PlayerGamesData } from './player-games';
 import { createRoot } from 'react-dom/client';
@@ -329,4 +330,4 @@ function App() {
     </main>
   );
 }
-createRoot(document.getElementById('root')!).render(location.pathname.replace(/\/$/,'') === '/regras' ? <RulesPage /> : <App />);
+createRoot(document.getElementById('root')!).render(location.pathname.replace(/\/$/,'') === '/tv' ? <Wallboard /> : location.pathname.replace(/\/$/,'') === '/regras' ? <RulesPage /> : <App />);

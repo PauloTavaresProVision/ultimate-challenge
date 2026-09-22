@@ -122,7 +122,7 @@ function App() {
     return (
       <main className="player-page">
         <div className="section-heading">
-          <div><div className="ultimate-logo player-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div><h1>Os teus jogos</h1></div>
+          <div><div className="ultimate-logo player-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div><h1>Área do jogador</h1>{games&&<p>Olá, {games.people.find(p=>p.id===games.playerId)?.name??'jogador'} · {games.standings?.[0]?.division}</p>}</div>
           <Button
             variant="outline"
             onClick={async () => {

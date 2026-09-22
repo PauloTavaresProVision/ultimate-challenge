@@ -1,3 +1,5 @@
+import {playerStandings} from '../../lib/player-standings.ts';
+import type {Player,Game} from '../../lib/tournament.ts';
 import {queueCode} from './verification-queue.ts';
 import {installJourneys} from './journeys.ts';
 import { installAI } from './ai-bot.ts';
@@ -441,7 +443,11 @@ app.get('/api/games', auth, async (_req, res) => {
     select: { id: true, name: true, side: true },
   });
   const pending=(await vacancies()).filter(v=>v.status==='pending');
-  res.json({ playerId: s.playerId, people, games:games.map(g=>({...g,absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId)})) });
+  const rankingPlayers=await db.player.findMany();
+  const archived=await db.setting.findMany({where:{key:{startsWith:'competition:month:'}},orderBy:{key:'desc'},take:24});
+  const month=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).slice(0,7);
+  const standings=playerStandings(s.playerId,rankingPlayers.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Game[],month,archived.map(r=>JSON.parse(r.value)));
+  res.json({ playerId: s.playerId, standings, people, games:games.map(g=>({...g,absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId)})) });
 });
 app.post('/api/games/:id/result', auth, async (req, res) => {
   const s = res.locals.session;

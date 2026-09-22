@@ -1,3 +1,4 @@
+import type {GroupContext} from './group-context.ts';
 import {botEnabled} from './ai-bot.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
 import { db } from './db.ts';
@@ -12,6 +13,7 @@ export async function handleJourneyConversation(
   text: string,
   eventId: string,
   quotedId?: string,
+  groupConversation?: GroupContext,
 ) {
   const serialKey = digest(group + phone);
   const work = (serial.get(serialKey) ?? Promise.resolve())
@@ -68,6 +70,8 @@ export async function handleJourneyConversation(
           text,
           {
             authorName: player.name,
+            authorId: groupConversation?.currentMessage.authorId,
+            groupConversation,
             division: player.division,
             today: new Date().toISOString(),
             quotedJourney: quoted,

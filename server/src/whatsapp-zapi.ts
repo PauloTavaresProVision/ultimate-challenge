@@ -17,7 +17,7 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
     await lease.connect();const lock=await lease.query('SELECT pg_try_advisory_lock(186937789,1) AS owned');
     if(!lock.rows[0].owned)throw new Error('Outra ligação WhatsApp está ativa.');
     const origin=new URL(config.APP_ORIGIN);if(origin.protocol!=='https:')throw new Error('A Z-API exige um endereço público HTTPS para os webhooks.');
-    const result=await client.call('update-every-webhooks','PUT',{value:`${origin.origin}/api/webhooks/zapi/${settings.webhookSecret}`,notifySentByMe:false});
+    const result=await client.call('update-every-webhooks','PUT',{value:`${origin.origin}/api/webhooks/zapi/${settings.webhookSecret}`,notifySentByMe:true});
     if(result.value!==true)throw new Error('A Z-API não confirmou a configuração dos webhooks.');
     let protectedQueue=false;
     try{
@@ -81,16 +81,17 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
         if(typeof qr.value!=='string'||!qr.value.startsWith('data:image/png;base64,'))throw new Error('A Z-API não devolveu uma imagem QR válida.');options.qr(qr.value);
       }
       const inbox=connected?await db.setting.findMany({where:{key:{startsWith:'zapi-inbox:'+settings.instanceId+':'}},take:100}):[];
-      for(const row of inbox){if(stopped)return;const p=JSON.parse(decrypt(row.value,config.MESSAGE_KEY));
+      const events=inbox.map(row=>({row,p:JSON.parse(decrypt(row.value,config.MESSAGE_KEY))})).sort((a,b)=>(Number(a.p.momment)||0)-(Number(b.p.momment)||0));
+      for(const {row,p} of events){if(stopped)return;
         if(p.instanceId!==settings.instanceId)continue;
         if(p.type==='ReceivedCallback'&&p.isGroup===true){
           const group=zJid(p.phone??'');
           if(['GROUP_PARTICIPANT_ADD','GROUP_PARTICIPANT_INVITE'].includes(p.notification))options.joined(group,(p.notificationParameters??[]).filter((v:unknown)=>typeof v==='string'&&/^\d+$/.test(v)).map(zJid));
-          if(!p.fromMe&&!p.isEdit&&!p.waitingMessage&&typeof p.text?.message==='string'&&typeof p.messageId==='string'){
+          if(!p.isEdit&&!p.waitingMessage&&typeof p.text?.message==='string'&&typeof p.messageId==='string'){
             const phone=typeof p.participantPhone==='string'&&/^\d+$/.test(p.participantPhone)?zJid(p.participantPhone):undefined;
             const lid=typeof p.participantLid==='string'&&p.participantLid.endsWith('@lid')?p.participantLid:undefined;
             if(phone&&lid)await db.setting.upsert({where:{key:'zapi-lid:'+settings.instanceId+':'+lid},create:{key:'zapi-lid:'+settings.instanceId+':'+lid,value:phone},update:{value:phone}});
-            if(phone||lid)options.message({key:{id:p.messageId,remoteJid:group,participant:lid??phone,participantAlt:phone,fromMe:false},message:{extendedTextMessage:{text:p.text.message,contextInfo:{stanzaId:p.referenceMessageId??undefined}}}});
+            if(phone||lid||p.fromMe)options.message({pushName:typeof p.senderName==='string'?p.senderName:undefined,messageTimestamp:Number.isFinite(Number(p.momment))?Math.floor(Number(p.momment)/1000):undefined,key:{id:p.messageId,remoteJid:group,participant:lid??phone,participantAlt:phone,fromMe:p.fromMe===true},message:{extendedTextMessage:{text:p.text.message,contextInfo:{stanzaId:p.referenceMessageId??undefined}}}});
           }
         }
         await db.setting.delete({where:{key:row.key}});

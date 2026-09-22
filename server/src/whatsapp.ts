@@ -1,3 +1,5 @@
+import {GroupQueue,type GroupTurn} from './group-context.ts';
+import {rememberGroupMessage,groupMessageId} from './group-memory.ts';
 import {retryZApi,zApiRetryDelay} from './zapi-recovery.ts';
 import {handleJourneyConversation} from './journey-conversation.ts';
 import {reminderStillEligible} from './invite-reminders.ts';
@@ -28,7 +30,7 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import { config } from './config.ts';
 import { db } from './db.ts';
-import { decrypt, encrypt, phoneFromJid } from './security.ts';
+import { decrypt, encrypt, digest, phoneFromJid } from './security.ts';
 const logger = pino({ level: 'silent' });
 export class WhatsApp {
   constructor(private readonly webFactory:typeof openWebWhatsApp=openWebWhatsApp){}
@@ -347,35 +349,52 @@ export class WhatsApp {
       this.socket = null;
     }
   }
+  private groupQueue = new GroupQueue();
   private handleMessages(messages:WAMessage[]) {
     const sock=this.socket;if(!sock)return;
         for (const message of messages) {
-          if (message.key.fromMe) continue;
           const text =
             message.message?.conversation ??
             message.message?.extendedTextMessage?.text ??
             '';
-          if (!text.trim() || text.length > 1500) continue;
+          if (!text.trim()) continue;
           const id = message.key.id;
-          if (!id || this.seen.has(id)) continue;
-          this.seen.set(id, Date.now());
+          const seenKey=(message.key.remoteJid??'')+':'+id;
+          if (!id || this.seen.has(seenKey)) continue;
+          this.seen.set(seenKey, Date.now());
           if (this.seen.size > 1000) {
             const first = this.seen.keys().next().value;
             if (first) this.seen.delete(first);
           }
-          if(!/^\/escada(?:\s|$)/i.test(text)) {
-            void (async()=>{
-              const group=message.key.remoteJid??'';
+          if(message.key.fromMe||!/^\/escada(?:\s|$)/i.test(text)) {
+            const group=message.key.remoteJid??'';
+            void this.groupQueue.run(group,async()=>{
               if(!await botEnabled()||(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
               let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
-              if(!phone){const metadata=await sock.groupMetadata(group);const member=metadata.participants.find(p=>p.id===message.key.participant);phone=phoneFromJid(member?.phoneNumber);}
-              if(phone){
-                const quoted=message.message?.extendedTextMessage?.contextInfo?.stanzaId??undefined;
-                if(await handleJourneyConversation(group,phone,text,id,quoted))return;
-                if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
-                await handleAI(group,phone,text,id);
+              if(!phone&&!message.key.fromMe){
+                const metadata=await sock.groupMetadata(group).catch(()=>null);
+                const member=metadata?.participants.find(p=>p.id===message.key.participant);
+                phone=phoneFromJid(member?.phoneNumber);
               }
-            })().catch(()=>console.error('Não foi possível processar a pergunta do grupo.'));
+              const player=phone?await db.player.findUnique({where:{phone}}):null;
+              const quote=message.message?.extendedTextMessage?.contextInfo;
+              const quoted=quote?.stanzaId??undefined;
+              const quotedText=quote?.quotedMessage?.conversation??quote?.quotedMessage?.extendedTextMessage?.text;
+              const timestamp=Number(message.messageTimestamp)*1000;
+              const at=Number.isFinite(timestamp)&&timestamp>0?Math.min(timestamp,Date.now()):Date.now();
+              const authorId=digest(group+':'+(message.key.fromMe?'connected_account':phone??message.key.participant??id));
+              const turn:GroupTurn={id:groupMessageId(group,id),authorId,
+                authorName:player?.name??message.pushName??(message.key.fromMe?'Conta do clube':'Participante'),
+                displayName:message.pushName??undefined,source:message.key.fromMe?'connected_account':'member',at,text,
+                replyToId:quoted?groupMessageId(group,quoted):undefined,
+                quoted:quoted&&quotedText?{id:groupMessageId(group,quoted),authorId:quote?.participant?digest(group+':'+(phoneFromJid(quote.participant)??quote.participant)):undefined,text:quotedText}:undefined};
+              const context=await rememberGroupMessage(group,turn);
+              // Human conversations and our own messages provide context, never authority to act.
+              if(message.key.fromMe||text.length>1500||!phone||!player?.verified||player.status!=='Ativo')return;
+              if(await handleJourneyConversation(group,phone,text,id,quoted,context))return;
+              if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
+              await handleAI(group,phone,text,id,context);
+            }).catch(()=>console.error('Não foi possível processar o contexto do grupo; nenhuma resposta automática preparada.'));
             continue;
           }
           void this.onCommand(
@@ -592,6 +611,11 @@ export class WhatsApp {
           where: { id: row.id },
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
+        if(row.recipient.endsWith('@g.us')){
+          await rememberGroupMessage(row.recipient,{id:groupMessageId(row.recipient,result.key.id),authorId:'platform',authorName:'Ultimate Challenge',source:'platform',audienceIds:('mentions' in content?content.mentions??[]:[]).map(jid=>digest(row.recipient+':'+(phoneFromJid(jid)??jid))),at:Date.now(),text:content.text})
+            .catch(()=>console.error('Não foi possível guardar a mensagem enviada no contexto do grupo.'));
+        }
+
       } catch (error) {
         if(row.kind==='group_join') {
           const message=error instanceof Error?error.message:String(error);

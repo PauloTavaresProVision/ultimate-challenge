@@ -1,3 +1,4 @@
+import {pruneGroupMemory} from './group-memory.ts';
 import {installWallboard} from './wallboard.ts';
 import {playerStandings} from '../../lib/player-standings.ts';
 import type {Player,Game} from '../../lib/tournament.ts';
@@ -525,6 +526,7 @@ const tickCompetition=async()=>{if(competitionRunning)return;competitionRunning=
 const competitionTimer=setInterval(()=>void tickCompetition(),60000);
 void tickCompetition();
 const cleanup = setInterval(() => {
+  void pruneGroupMemory().catch(()=>console.error("Não foi possível limpar o contexto antigo do grupo."));
   void db.outbox
     .updateMany({
       where: {

@@ -1,3 +1,4 @@
+import {GroupQueue} from './group-context.ts';
 import WWebJS from 'whatsapp-web.js';
 import type {Client as WebClient, ClientOptions, GroupChat, Message} from 'whatsapp-web.js';
 import {Client as PgClient} from 'pg';
@@ -118,14 +119,18 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
   });
   client.on('message_ack',(message:Message,ack:number)=>{const status=webReceipt(ack);if(!stopped&&status!==undefined)options.receipt(message.id._serialized,status);});
   client.on('group_join',notification=>{if(!stopped)options.joined(notification.chatId,notification.recipientIds.map(fromWebId));});
-  client.on('message',(message:Message)=>{void (async()=>{
-    if(stopped||!ready||message.fromMe||!message.body||!message.from.endsWith('@g.us'))return;
+  const messageQueue=new GroupQueue();
+  client.on('message_create',(message:Message)=>{
+    const group=message.fromMe?message.to:message.from;
+    void messageQueue.run(group,async()=>{
+    if(stopped||!ready||!message.body||!group.endsWith('@g.us'))return;
     const sender=message.author??message.from;
     const phone=await pn(sender);if(stopped||!ready)return;
     const quoted=message.hasQuotedMsg?await message.getQuotedMessage().catch(()=>null):null;
-    options.message({key:{id:message.id._serialized,remoteJid:message.from,fromMe:false,participant:fromWebId(sender),participantAlt:phone??undefined},
-      message:{extendedTextMessage:{text:message.body,contextInfo:quoted?{stanzaId:quoted.id._serialized}:undefined}}});
-  })().catch(()=>console.error('WhatsApp Web: falha ao ler mensagem do grupo.'));});
+    options.message({key:{id:message.id._serialized,remoteJid:group,fromMe:message.fromMe,participant:fromWebId(sender),participantAlt:phone??undefined},
+      messageTimestamp:message.timestamp,
+      message:{extendedTextMessage:{text:message.body,contextInfo:quoted?{stanzaId:quoted.id._serialized,participant:fromWebId(quoted.author??quoted.from),quotedMessage:{conversation:quoted.body}}:undefined}}});
+  }).catch(()=>console.error('WhatsApp Web: falha ao ler mensagem do grupo.'));});
   // Let the caller install ownership before any browser callback is delivered.
   initialization=new Promise<void>(resolve=>setImmediate(resolve)).then(()=>{if(!stopped)return client.initialize();});
   void initialization.catch(error=>{

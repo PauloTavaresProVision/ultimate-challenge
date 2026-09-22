@@ -1,3 +1,4 @@
+import type {GroupContext} from './group-context.ts';
 import {converse,type Turn} from './tournament-assistant.ts';
 import {queryTournament} from './tournament-queries.ts';
 import type {Express,RequestHandler} from 'express';
@@ -13,7 +14,7 @@ async function budget(playerId:string){
  for(const [key,limit] of [['bot-hour:'+hour,60],['bot-user:'+playerId+':'+minute,4]] as const){const row=await db.rateLimit.upsert({where:{key},create:{key,count:1,expiresAt:new Date(Date.now()+7200000)},update:{count:{increment:1}}});if(row.count>limit)throw Error('Limite de perguntas atingido. Aguarda antes de tentar novamente.');}
 }
 const conversations = new Map<string,Promise<unknown>>();
-export async function answerQuestion(playerId:string,text:string,scope='simulator') {
+export async function answerQuestion(playerId:string,text:string,scope='simulator',groupConversation?:GroupContext) {
  const memoryKey='bot-memory:'+digest(scope+':'+playerId);
  const previous=conversations.get(memoryKey)??Promise.resolve();
  const work=previous.catch(()=>{}).then(async()=>{
@@ -24,7 +25,7 @@ export async function answerQuestion(playerId:string,text:string,scope='simulato
   const record=await db.setting.findUnique({where:{key:memoryKey}});
   let history:Turn[]=[];
   if(record){try{const saved=JSON.parse(decrypt(record.value,config.MESSAGE_KEY));if(saved.expiresAt>Date.now())history=saved.turns.slice(-8);}catch{}}
-  const answer=await converse(decrypt(key.value,config.MESSAGE_KEY),text,history,{name:player.name,division:player.division,side:player.side,today:todayLuanda(),timezone:'Africa/Luanda',gamesUrl:config.APP_ORIGIN+'/jogos',rulesUrl:config.APP_ORIGIN+'/regras'},q=>queryTournament(playerId,q));
+  const answer=await converse(decrypt(key.value,config.MESSAGE_KEY),text,history,{groupConversation,name:player.name,division:player.division,side:player.side,today:todayLuanda(),timezone:'Africa/Luanda',gamesUrl:config.APP_ORIGIN+'/jogos',rulesUrl:config.APP_ORIGIN+'/regras'},q=>queryTournament(playerId,q));
   if(answer){
    const turns=[...history,{role:'user',content:text},{role:'assistant',content:answer}].slice(-8);
    const value=encrypt(JSON.stringify({expiresAt:Date.now()+3600000,turns}),config.MESSAGE_KEY);
@@ -35,14 +36,14 @@ export async function answerQuestion(playerId:string,text:string,scope='simulato
  conversations.set(memoryKey,work);
  try{return await work;}finally{if(conversations.get(memoryKey)===work)conversations.delete(memoryKey);}
 }
-export async function handleAI(group:string,phone:string,text:string,id:string){
+export async function handleAI(group:string,phone:string,text:string,id:string,groupConversation?:GroupContext){
  if(!text.trim()||text.length>1500||!await botEnabled())return;
  const selected=await db.setting.findUnique({where:{key:'whatsapp_group'}});if(selected?.value!==group)return;
  const player=await db.player.findUnique({where:{phone}});if(!player||player.status!=='Ativo'||!player.verified)return;
  const key='bot-event:'+digest(group+':'+id);
  try{await db.setting.create({data:{key,value:'processing'}});}catch(e){if((e as {code?:string}).code==='P2002')return;throw e;}
  try{
- const answer=await answerQuestion(player.id,text,group);
+ const answer=await answerQuestion(player.id,text,group,groupConversation);
  await db.$transaction(async tx=>{
   if(answer && (await tx.setting.findUnique({where:{key:'bot-enabled'}}))?.value!=='false' && (await tx.setting.findUnique({where:{key:'whatsapp_group'}}))?.value===group)await tx.outbox.create({data:{recipient:group,kind:'ai',encryptedBody:encrypt(JSON.stringify({format:"mentioned-reply-v1",...mentionedReply(answer,player.phone)}),config.MESSAGE_KEY),expiresAt:new Date(Date.now()+300000)}});
   await tx.setting.update({where:{key},data:{value:answer?'answered':'silent'}});

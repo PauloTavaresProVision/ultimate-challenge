@@ -1,9 +1,19 @@
-import {useEffect,useState} from 'react';
+import {Component,useEffect,useState,type ReactNode} from 'react';
 import {Maximize,Minimize} from 'lucide-react';
 import {wallName,wallSlot,type WallData} from '../lib/wallboard';
 import {api} from '../components/whatsapp-live';
 import './wallboard.css';
-export default function Wallboard(){
+class WallboardRecovery extends Component<{children:ReactNode},{failed:boolean}>{
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  componentDidCatch(error:Error){console.error('TV: falha ao apresentar os jogos',error);}
+  render(){
+    if(this.state.failed)return <main className="wallboard"><div className="wall-empty" role="alert"><h1>Não foi possível apresentar os jogos</h1><p>Volta a carregar o painel para tentar novamente.</p><button onClick={()=>window.location.reload()}>Voltar a carregar</button></div></main>;
+    return this.props.children;
+  }
+}
+export default function Wallboard(){return <WallboardRecovery><WallboardContent/></WallboardRecovery>;}
+function WallboardContent(){
   const [date,setDate]=useState(''),[data,setData]=useState<WallData|null>(null),[error,setError]=useState('');
   const [manual,setManual]=useState(''),[tick,setTick]=useState(Date.now()),[offset,setOffset]=useState(0),[full,setFull]=useState(false),[fullError,setFullError]=useState('');
   useEffect(()=>{const timer=setInterval(()=>setTick(Date.now()),1000);return()=>clearInterval(timer);},[]);

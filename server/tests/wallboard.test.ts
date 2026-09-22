@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {runInNewContext} from 'node:vm';
 import {wallSlot,wallName} from '../../lib/wallboard.ts';
 test('TV advances all divisions together using Luanda time and keeps first/last slots outside playing hours',()=>{
  const times=['20:00','20:20','20:40','21:00'];
@@ -12,4 +13,8 @@ test('Long player names preserve first and last names and abbreviate middle name
  assert.equal(wallName('Manuel Santos'),'Manuel Santos');
  assert.equal(wallName('Carlos Miguel Lourenço Sousa'),'Carlos M. L. Sousa');
  assert.equal(wallName('André Alexandre Macedo da Silva'),'André A. M. da Silva');
+});
+test('TV renders long names on browsers without Array.prototype.at',()=>{
+ const result=runInNewContext(`Array.prototype.at=undefined; (${wallName.toString()})(name)`,{name:'Paulo Alexandre Pires Bernardo'});
+ assert.equal(result,'Paulo A. P. Bernardo');
 });

@@ -8,5 +8,5 @@ export function wallName(name:string){
   if(name.length<=25)return name;
   const words=name.trim().split(/\s+/);
   if(words.length<=2)return name;
-  return [words[0],...words.slice(1,-1).map(w=>/^(de|da|do|dos|das|e)$/i.test(w)?w:w[0]+'.'),words.at(-1)].join(' ');
+  return [words[0],...words.slice(1,-1).map(w=>/^(de|da|do|dos|das|e)$/i.test(w)?w:w[0]+'.'),words[words.length-1]].join(' ');
 }

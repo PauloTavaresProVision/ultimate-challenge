@@ -2,7 +2,7 @@
 import {db} from './src/db.ts';
 import {decrypt} from './src/security.ts';
 import {config} from './src/config.ts';
-import {interpretParticipation} from './src/journey-ai.ts';
+import {interpretParticipation,PARTICIPATION_VERSION} from './src/journey-ai.ts';
 import {groupContext} from './src/group-context.ts';
 const base=Date.parse('2026-09-21T22:00:00+01:00');
 const message=(id,author,text,extra={})=>({id,authorId:author,authorName:author,source:'member',at:base+Number(id)*1000,text,...extra});
@@ -34,11 +34,13 @@ try{
  const stored=await db.setting.findUnique({where:{key:'openai_key'}});
  if(!stored)throw Error();
  const key=decrypt(stored.value,config.MESSAGE_KEY);
+ console.log('Avaliação:',PARTICIPATION_VERSION);
  let failed=0;
  for(const c of cases){
-  const decision=await interpretParticipation(key,c.current.text,{authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:false},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:false}]},['first','second']);
+  const trace=[];
+  const decision=await interpretParticipation(key,c.current.text,{authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:false},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:false}]},['first','second'],fetch,value=>trace.push(value));
   const ok=decision.action===c.expected&&(!c.journeyId||decision.journeyId===c.journeyId);
-  if(!ok)failed++;
+  if(!ok){failed++;console.log('DIAGNÓSTICO:',JSON.stringify(trace));}
   console.log(`${ok?'OK':'FALHOU'} | ${c.label} | esperado: ${c.expected}${c.journeyId?'/'+c.journeyId:''} | obtido: ${decision.action}/${decision.journeyId??'-'}`);
  }
  console.log(`${cases.length-failed}/${cases.length} conversas corretas. Nenhuma mensagem enviada e nenhuma inscrição alterada.`);

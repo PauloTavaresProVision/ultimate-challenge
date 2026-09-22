@@ -1,3 +1,4 @@
+import {routeGroupIntervention,permittedIntervention} from './group-intervention.ts';
 import {groupContextInstructions,type GroupContext} from './group-context.ts';
 import { z } from 'zod';
 export const journeyDecision = z
@@ -8,7 +9,7 @@ export const journeyDecision = z
   .strict();
 export type JourneyDecision = z.infer<typeof journeyDecision>;
 const classifiedDecision = journeyDecision.extend({speechAct:z.enum(['independent_request','continuation','information_question','human_reply','conversation','unclear']),explicitPlatformRequest:z.boolean(),basisMessageId:z.string().nullable(),scope:z.enum(['personal_participation','tournament_question','conversation','third_party_change']),addressedTo:z.enum(['assistant','group','person','unclear']),personalRequest:z.boolean()});
-export async function interpretParticipation(
+export async function interpretJourneyAction(
   key: string,
   text: string,
   context: object,
@@ -34,6 +35,7 @@ export async function interpretParticipation(
       },
       body: JSON.stringify({
         model: 'gpt-4.1-mini',
+        temperature: 0,
         store: false,
         max_output_tokens: 400,
         instructions: `Primeiro determina o ATO DE FALA, antes de considerar inscrições ou jornadas. Preenche speechAct:
@@ -131,4 +133,17 @@ Usa today e as datas reais no fuso Africa/Luanda para interpretar qualquer refer
       'Não foi possível interpretar a participação. Nenhuma inscrição foi alterada. Tenta novamente.',
     );
   }
+}
+
+export const PARTICIPATION_VERSION='group-context-v3';
+export async function interpretParticipation(key:string,text:string,context:object,allowedIds:string[],fetcher:typeof fetch=fetch,trace?:(value:object)=>void):Promise<JourneyDecision>{
+ try{
+  const routing=await routeGroupIntervention(key,text,context,fetcher);
+  const permission=permittedIntervention(routing,text,context);
+  trace?.({phase:'destinatario',...routing,permission});
+  if(permission!=='participation')return {action:permission,journeyId:null};
+  const decision=await interpretJourneyAction(key,text,context,allowedIds,fetcher);
+  trace?.({phase:'participacao',...decision});
+  return decision;
+ }catch{throw Error('Não foi possível interpretar a conversa. Nenhuma inscrição foi alterada.');}
 }

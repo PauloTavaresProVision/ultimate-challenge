@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {interpretParticipation} from '../src/journey-ai.ts';
+import {interpretJourneyAction as interpretParticipation} from '../src/journey-ai.ts';
 const reply=(v:any)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({speechAct:v.action==='none'?'information_question':'independent_request',explicitPlatformRequest:false,basisMessageId:null,addressedTo:'assistant',personalRequest:true,scope:v.action==='none'?'tournament_question':v.action==='silent'?'conversation':'personal_participation',...v})}]}]}));
 test('Colloquial messages are passed to OpenAI without a phrase whitelist',async()=>{
  for(const text of ['estou in','alinho','mete o meu nome','podes contar comigo','a de terça']){

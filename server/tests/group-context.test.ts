@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {appendGroupTurn,groupContext,GroupQueue,GROUP_CONTEXT_AGE,GROUP_CONTEXT_LIMIT,type GroupTurn} from '../src/group-context.ts';
-import {interpretParticipation} from '../src/journey-ai.ts';
+import {interpretJourneyAction as interpretParticipation} from '../src/journey-ai.ts';
 import {converse} from '../src/tournament-assistant.ts';
 const now=Date.now();
 const turn=(id:string,author:string,text:string,extra:Partial<GroupTurn>={}):GroupTurn=>({id,authorId:author,authorName:author,source:'member',at:now,text,...extra});

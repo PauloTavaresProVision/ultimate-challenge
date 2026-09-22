@@ -1,5 +1,5 @@
 .wallboard{min-height:100dvh;box-sizing:border-box;background:#f0f4f6;color:#12394f;display:flex;flex-direction:column;padding:2vh 2vw;gap:1.5vh;font-family:Arial,sans-serif}
-.wall-header{display:grid;grid-template-columns:22% 1fr 16%;align-items:center;gap:2vw;background:white;border-radius:12px;padding:1vh 1.2vw}
+.wall-header{display:grid;grid-template-columns:18% 12% 1fr 16%;align-items:center;gap:2vw;background:white;border-radius:12px;padding:1vh 1.2vw}
 .wall-header>img{width:100%;height:10vh;object-fit:cover;object-position:center}
 .wall-header h1{font-size:clamp(24px,2.8vw,64px);margin:0;text-align:center;line-height:1.1}
 .wall-header p{font-size:clamp(16px,1.4vw,32px);text-align:center;color:#708496;margin:1vh 0 0}
@@ -21,4 +21,6 @@
 .wall-times{display:flex;gap:.5vw;flex:1}.wall-footer .selected{background:#c2ef35;border-color:#c2ef35;font-weight:700}.wall-fullscreen{display:flex;align-items:center;gap:8px}
 .wall-error{color:#874513;background:#fff0d6;padding:8px 14px;margin:0;font-size:16px}.wall-empty{margin:auto;text-align:center}
 .wall-footer button:focus-visible,.wall-footer select:focus-visible{outline:3px solid #4b879b;outline-offset:3px}
-@media(max-width:900px){.wall-header{grid-template-columns:20% 1fr 20%}.wall-clock span{font-size:12px}.wall-level{grid-template-columns:1fr}.wall-level-label{flex-direction:row;justify-content:flex-start}.wall-courts{grid-template-columns:repeat(2,minmax(0,1fr))}.wall-match{min-height:230px;padding:12px}.wall-team{font-size:18px}.wall-versus{font-size:14px}.wall-header>img{object-fit:contain}.wall-levels{grid-template-rows:auto}.wall-times{flex-wrap:wrap}}
+@media(max-width:900px){.wall-header{grid-template-columns:18% 14% 1fr 18%}.wall-clock span{font-size:12px}.wall-level{grid-template-columns:1fr}.wall-level-label{flex-direction:row;justify-content:flex-start}.wall-courts{grid-template-columns:repeat(2,minmax(0,1fr))}.wall-match{min-height:230px;padding:12px}.wall-team{font-size:18px}.wall-versus{font-size:14px}.wall-header>img{object-fit:contain}.wall-levels{grid-template-rows:auto}.wall-times{flex-wrap:wrap}}
+
+.wall-header>img.wall-club-logo{object-fit:contain;object-position:center;height:10vh;width:100%}

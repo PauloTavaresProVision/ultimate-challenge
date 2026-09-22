@@ -21,7 +21,7 @@ export default function Wallboard(){
   const day=(value:string)=>new Intl.DateTimeFormat('pt-PT',{day:'numeric',month:'long',year:'numeric',timeZone:'Africa/Luanda'}).format(new Date(value+'T12:00:00+01:00'));
   const clock=new Intl.DateTimeFormat('pt-PT',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Luanda'}).format(now);
   return <main className="wallboard">
-    <header className="wall-header"><img src="/ultimate-challenge.png" alt="Ultimate Challenge"/><div><h1>{[...new Set(data?.games.map(g=>g.location)??[])].join(' · ')||'Ultimate Challenge'}</h1><p>{data?day(data.date):'A carregar jogos…'}</p></div><div className="wall-clock"><strong>{clock}</strong><span>Hora de Luanda</span></div></header>
+    <header className="wall-header"><img src="/ultimate-challenge.png" alt="Ultimate Challenge"/><img className="wall-club-logo" src="/premier-padel-club.png" alt="Premier Padel Club · Standard Bank"/><div><h1>{[...new Set(data?.games.map(g=>g.location)??[])].join(' · ')||'Ultimate Challenge'}</h1><p>{data?day(data.date):'A carregar jogos…'}</p></div><div className="wall-clock"><strong>{clock}</strong><span>Hora de Luanda</span></div></header>
     <div className="wall-summary"><span>{data?.games.length??0} jogos no dia · {new Set(data?.games.map(g=>g.court)).size} campos · {new Set(data?.games.map(g=>g.division)).size} níveis</span><span>{next?`Próximo horário ${next}`:'Último horário do dia'}</span></div>
     {error&&<p className="wall-error" role="alert">{error} {data?'A mostrar a última atualização.':''}</p>}
     <div className="wall-levels" style={{'--levels':Math.max(1,levels.length)} as React.CSSProperties}>

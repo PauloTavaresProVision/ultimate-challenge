@@ -22,6 +22,12 @@ const cases=[
  {label:'Esclarecimento da plataforma ao mesmo autor',history:[message('1','João','Quero entrar'),platformQuestion],current:message('3','João','A de 23',{replyToId:'2'}),expected:'join',journeyId:'first'},
  {label:'Pedido claro mas ainda ambíguo',history:[announcement],current:message('3','João','Plataforma, quero alterar a minha inscrição'),expected:'clarify'},
  {label:'Consulta explícita após conversa social',history:[absent,message('2','Nelinho','Amanhã faço alteração')],current:message('3','João','Assistente, com quem jogo?'),expected:'none'},
+ {label:'Confirmação com outras palavras dirigida a pessoa',history:[message('1','Rui','Miguel, conto contigo no treino?')],current:message('3','Miguel','Claro, lá estarei',{replyToId:'1'}),expected:'silent'},
+ {label:'Outra pessoa responde ao esclarecimento alheio',history:[platformQuestion],current:message('3','Miguel','A primeira opção',{replyToId:'2'}),expected:'silent'},
+ {label:'Nova adesão não herda o pedido anterior',history:[platformQuestion],current:message('3','Miguel','Quero inscrever-me no dia 23'),expected:'join',journeyId:'first'},
+ {label:'Consulta explícita cita uma mensagem humana',history:[question],current:message('3','João','Assistente, confirma o horário dos meus jogos',{replyToId:'2'}),expected:'none'},
+ {label:'Pergunta sobre campos não é alteração de inscrição',history:[absent],current:message('3','João','Plataforma, em que campo vou jogar?'),expected:'none'},
+ {label:'Pergunta sobre dupla sem jogos no contexto',history:[],current:message('3','João','Com quem estou a jogar?'),expected:'none'},
  {label:'Desistência própria dirigida à plataforma',history:[announcement],current:message('3','João','Plataforma, tira-me dos jogos de dia 23, não consigo ir'),expected:'leave',journeyId:'first'},
 ];
 try{

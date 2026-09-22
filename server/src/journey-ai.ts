@@ -1,4 +1,4 @@
-import {groupContextInstructions} from './group-context.ts';
+import {groupContextInstructions,type GroupContext} from './group-context.ts';
 import { z } from 'zod';
 export const journeyDecision = z
   .object({
@@ -7,7 +7,7 @@ export const journeyDecision = z
   })
   .strict();
 export type JourneyDecision = z.infer<typeof journeyDecision>;
-const classifiedDecision = journeyDecision.extend({scope:z.enum(['personal_participation','tournament_question','conversation','third_party_change']),addressedTo:z.enum(['assistant','group','person','unclear']),personalRequest:z.boolean()});
+const classifiedDecision = journeyDecision.extend({speechAct:z.enum(['independent_request','continuation','information_question','human_reply','conversation','unclear']),explicitPlatformRequest:z.boolean(),basisMessageId:z.string().nullable(),scope:z.enum(['personal_participation','tournament_question','conversation','third_party_change']),addressedTo:z.enum(['assistant','group','person','unclear']),personalRequest:z.boolean()});
 export async function interpretParticipation(
   key: string,
   text: string,
@@ -16,8 +16,12 @@ export async function interpretParticipation(
   fetcher: typeof fetch = fetch,
 ) {
   try {
-    const raw = context as {journeys?: Array<{date:string}>};
-    const enrichedContext = {...context, journeys: raw.journeys?.map(j=>({...j,
+    const raw = context as {journeys?: Array<{date:string}>;groupConversation?:GroupContext;quotedJourney?:string|null};
+    const conversation=raw.groupConversation;
+    const replied=conversation?.repliedMessage;
+    const replySource=replied&&'source' in replied?replied.source:(raw.quotedJourney&&allowedIds.includes(raw.quotedJourney)?'platform':null);
+    const repliedAudience=replied&&'audienceIds' in replied?replied.audienceIds:undefined;
+    const enrichedContext = {...context, replyFacts:conversation?{hasExplicitReply:!!conversation.currentMessage.replyToId,replySource,replyIsToOtherPerson:!!repliedAudience?.length&&!repliedAudience.includes(conversation.currentMessage.authorId)}:undefined, journeys: raw.journeys?.map(j=>({...j,
       weekday: new Intl.DateTimeFormat('pt-PT',{weekday:'long',timeZone:'Africa/Luanda'}).format(new Date(j.date+'T12:00:00+01:00'))
     }))};
     const r = await fetcher('https://api.openai.com/v1/responses', {
@@ -31,8 +35,16 @@ export async function interpretParticipation(
       body: JSON.stringify({
         model: 'gpt-4.1-mini',
         store: false,
-        max_output_tokens: 250,
-        instructions: groupContextInstructions + `
+        max_output_tokens: 400,
+        instructions: `Primeiro determina o ATO DE FALA, antes de considerar inscrições ou jornadas. Preenche speechAct:
+- information_question: o autor pede informação, não uma alteração. Perguntar parceiro, campo, horário, resultados ou vagas é uma consulta; falta de dados para responder NÃO a transforma em clarify de inscrição. Mesmo se action for incerto, mantém information_question.
+- independent_request: a mensagem atual, pelo seu próprio significado, pede que a plataforma faça uma alteração pessoal. Pode ser informal; não exige uma expressão fixa.
+- continuation: a mensagem depende de um pedido/pergunta anterior para ter significado de ação. Identifica em basisMessageId a mensagem da plataforma que está a continuar. Só o destinatário dessa pergunta pode continuá-la. Confirmações sem objeto/intenção própria não iniciam pedidos novos nem herdam pedidos de outros autores.
+- human_reply: responde a um participante, por citação ou continuidade da conversa, mesmo que a frase isolada pareça confirmar presença.
+- conversation ou unclear: recado/social ou não é possível estabelecer pedido e destinatário.
+explicitPlatformRequest só é true se a mensagem atual se dirige explicitamente à plataforma/assistente. Uma resposta citada a um humano dirige-se por defeito ao humano, não à plataforma: não transforma confirmação para esse jogador numa inscrição. Pode haver uma nova pergunta explicitamente ao assistente sobre o texto citado; nesse caso avalia esse pedido independente. Usa replyFacts como factos de encaminhamento. Não infiras destinatário a partir da divisão ou das jornadas disponíveis.
+basisMessageId é null num pedido independente/pergunta nova; para continuation deve identificar a pergunta da plataforma ao autor atual, usando os IDs recebidos. Se não há essa pergunta, permanece silent.
+` + groupContextInstructions + `
 Interpreta a intenção de participação em jogos de padel, em português natural. A identidade do autor atual vem de authorId/authorName; os nomes de outras pessoas no contexto nunca transferem a sua intenção para o autor atual.
 Classifica addressedTo como assistant quando se espera uma ação ou resposta da plataforma, person quando a conversa se dirige a uma pessoa (por nome, citação ou continuidade), group para comunicados/conversa geral e unclear quando não é possível determinar. Uma adesão pessoal clara a um anúncio de inscrições é dirigida à plataforma mesmo sem a nomear. Ter uma data ou usar a primeira pessoa, por si só, não prova esse pedido. Promessas de tratar do assunto mais tarde, relatos de alterações e perguntas entre pessoas não são pedidos à plataforma. Na dúvida sobre intervir, usa silent.
 Classifica scope: personal_participation para a intenção do próprio autor de entrar/sair ou continuar um esclarecimento da SUA participação; tournament_question para consultas à plataforma sobre torneio, jogos, vagas ou regras; conversation para comunicados, comentários e conversa entre pessoas; third_party_change para alterações relativas a outra pessoa. person, unclear, conversation e third_party_change exigem action silent e journeyId null. Não respondas por uma pessoa nem interpretes uma mensagem para a organização como uma ordem para a plataforma. Uma resposta anterior indevida da IA não legitima continuar a intromissão.
@@ -50,6 +62,9 @@ Usa today e as datas reais no fuso Africa/Luanda para interpretar qualquer refer
               type: 'object',
               additionalProperties: false,
               properties: {
+                speechAct:{type:'string',enum:['independent_request','continuation','information_question','human_reply','conversation','unclear']},
+                explicitPlatformRequest:{type:'boolean'},
+                basisMessageId:{type:['string','null']},
                 addressedTo: {type:'string',enum:['assistant','group','person','unclear']},
                 personalRequest: {type:'boolean'},
                 scope: {type:'string',enum:['personal_participation','tournament_question','conversation','third_party_change']},
@@ -62,7 +77,7 @@ Usa today e as datas reais no fuso Africa/Luanda para interpretar qualquer refer
                   enum: [null, ...allowedIds],
                 },
               },
-              required: ['addressedTo', 'personalRequest', 'scope', 'action', 'journeyId'],
+              required: ['speechAct','explicitPlatformRequest','basisMessageId','addressedTo', 'personalRequest', 'scope', 'action', 'journeyId'],
             },
           },
         },
@@ -77,9 +92,22 @@ Usa today e as datas reais no fuso Africa/Luanda para interpretar qualquer refer
       .map((c: any) => c.text ?? '')
       .join('');
     const classified = classifiedDecision.parse(JSON.parse(value));
+    // Reply routing is verified against message metadata, not a phrase blacklist.
+    if(conversation?.currentMessage.replyToId&&replySource!=='platform'&&!classified.explicitPlatformRequest)
+      return {action:'silent' as const,journeyId:null};
+    if(['human_reply','conversation','unclear'].includes(classified.speechAct))
+      return {action:'silent' as const,journeyId:null};
+    if(classified.speechAct==='continuation'){
+      const parent=conversation?.messages.find(m=>m.id===classified.basisMessageId);
+      if(!parent||parent.source!=='platform'||!parent.audienceIds?.includes(conversation!.currentMessage.authorId)||
+        (conversation?.currentMessage.replyToId&&conversation.currentMessage.replyToId!==parent.id))
+        return {action:'silent' as const,journeyId:null};
+    }
+
     if (classified.addressedTo === 'person' || classified.addressedTo === 'unclear') return {action:'silent' as const,journeyId:null};
     if (classified.scope === 'conversation' || classified.scope === 'third_party_change')
       return {action:'silent' as const,journeyId:null};
+    if(classified.speechAct==='information_question')return {action:classified.addressedTo==='assistant'?'none' as const:'silent' as const,journeyId:null};
     if (classified.scope === 'tournament_question') return {action:classified.addressedTo==='assistant'?'none' as const:'silent' as const,journeyId:null};
     if(classified.action==='clarify'&&classified.addressedTo!=='assistant')return {action:'silent' as const,journeyId:null};
     if (!classified.personalRequest) return {action:'silent' as const,journeyId:null};

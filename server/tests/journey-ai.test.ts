@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {interpretParticipation} from '../src/journey-ai.ts';
-const reply=(v:any)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({addressedTo:'assistant',personalRequest:true,scope:v.action==='none'?'tournament_question':v.action==='silent'?'conversation':'personal_participation',...v})}]}]}));
+const reply=(v:any)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({speechAct:v.action==='none'?'information_question':'independent_request',explicitPlatformRequest:false,basisMessageId:null,addressedTo:'assistant',personalRequest:true,scope:v.action==='none'?'tournament_question':v.action==='silent'?'conversation':'personal_participation',...v})}]}]}));
 test('Colloquial messages are passed to OpenAI without a phrase whitelist',async()=>{
  for(const text of ['estou in','alinho','mete o meu nome','podes contar comigo','a de terça']){
  const decision=await interpretParticipation('fake',text,{history:'quero participar',quotedJourney:'one'},['one'],async(url,opts)=>{assert.equal(url,'https://api.openai.com/v1/responses');const body=JSON.parse(String(opts?.body));assert.equal(JSON.parse(body.input).message,text);assert.equal(body.store,false);assert.equal(body.text.format.strict,true);return reply({action:'join',journeyId:'one'});});assert.equal(decision.action,'join');}

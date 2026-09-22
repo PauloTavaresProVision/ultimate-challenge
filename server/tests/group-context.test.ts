@@ -5,7 +5,7 @@ import {interpretParticipation} from '../src/journey-ai.ts';
 import {converse} from '../src/tournament-assistant.ts';
 const now=Date.now();
 const turn=(id:string,author:string,text:string,extra:Partial<GroupTurn>={}):GroupTurn=>({id,authorId:author,authorName:author,source:'member',at:now,text,...extra});
-const output=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
+const output=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({speechAct:'independent_request',explicitPlatformRequest:false,basisMessageId:null,...(value as object)})}]}]}));
 test('Shared context retains different authors, resolves quoted replies and excludes future messages',()=>{
  const first=turn('a','Alexandre','Boa noite Nelinho, não vou conseguir jogar entre pfvr 1 suplente',{at:now-5000});
  const second=turn('b','Nelinho','Amanhã faço alteração',{replyToId:'a'});
@@ -62,4 +62,32 @@ test('Explicit reply resolves despite timestamp precision differences between tr
  const current=turn('b','João','Dia 23',{replyToId:'a'});
  const context=groupContext([sent],current);
  assert.equal(context.repliedMessage?.id,'a');
+});
+
+test('Quoted human replies stay silent despite a false positive join; a new explicit platform question remains allowed',async()=>{
+ const parent=turn('human','Pedro','João, vens jogar amanhã?');
+ const current=turn('response','João','Sim, conta comigo',{replyToId:'human'});
+ const context={groupConversation:groupContext([parent],current)};
+ const result=await interpretParticipation('fake',current.text,context,['one'],async()=>output({speechAct:'independent_request',explicitPlatformRequest:false,addressedTo:'assistant',personalRequest:true,scope:'personal_participation',action:'join',journeyId:'one'}));
+ assert.equal(result.action,'silent');
+ const question=await interpretParticipation('fake','Assistente, em que campo jogo?',context,['one'],async()=>output({speechAct:'information_question',explicitPlatformRequest:true,addressedTo:'assistant',personalRequest:false,scope:'tournament_question',action:'clarify',journeyId:null}));
+ assert.equal(question.action,'none');
+});
+test('Continuation requires an existing platform question addressed to this author, never someone else',async()=>{
+ const parent=turn('question','platform','Dia 23 ou dia 30?',{source:'platform',audienceIds:['João']});
+ for(const [author,basis,expected] of [['Carlos','question','silent'],['João','invented','silent'],['João','question','join']]){
+  const current=turn('response',author,'Dia 23');
+  const result=await interpretParticipation('fake',current.text,{groupConversation:groupContext([parent],current)},['one'],async()=>output({speechAct:'continuation',basisMessageId:basis,explicitPlatformRequest:false,addressedTo:'assistant',personalRequest:true,scope:'personal_participation',action:'join',journeyId:'one'}));
+  assert.equal(result.action,expected);
+ }
+});
+test('An information question cannot become a participation clarification because the schedule is unknown',async()=>{
+ const result=await interpretParticipation('fake','Assistente, com quem jogo?',{},[],async()=>output({speechAct:'information_question',explicitPlatformRequest:true,addressedTo:'assistant',personalRequest:true,scope:'personal_participation',action:'clarify',journeyId:null}));
+ assert.equal(result.action,'none');
+});
+
+test('A verified older announcement remains usable when its text has left the recent context',async()=>{
+ const current=turn('response','João','Estou in',{replyToId:'old-announcement'});
+ const result=await interpretParticipation('fake',current.text,{quotedJourney:'one',groupConversation:groupContext([],current)},['one'],async()=>output({speechAct:'independent_request',explicitPlatformRequest:false,addressedTo:'assistant',personalRequest:true,scope:'personal_participation',action:'join',journeyId:'one'}));
+ assert.equal(result.action,'join');assert.equal(result.journeyId,'one');
 });

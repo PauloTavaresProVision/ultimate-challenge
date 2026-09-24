@@ -33,6 +33,8 @@ export async function api<T = any>(
 type Group = { id: string; name: string };
 type Connection = { warning?: string | null; automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
+  const [tab,setTab]=useState('connection');
+  const tabs=[['connection','Ligação e grupo'],['automation','Envios e IA'],['invites','Convites'],['messages','Mensagens']];
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Group | null>(null);
@@ -92,28 +94,6 @@ export default function WhatsAppLive() {
     {error && <div className="form-error" role="alert">{error}</div>}
     {state.lastError && <p className="form-error" role="status">{state.lastError}</p>}
     {state.warning && <p role="status">{state.warning}</p>}
-    <AIResponseControl />
-    <section className="wa-card" aria-label="Envios automáticos">
-      <header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div>
-        <h2>{state.automaticPaused ? 'Envios automáticos pausados' : 'Envios automáticos ativos'}</h2>
-        <p>{state.automaticPaused ? 'A fila está em espera. Podes ligar um número e usar Enviar teste.' : 'Pausa antes de ligar um número apenas para testes.'}</p>
-      </div></header>
-      <Button variant={state.automaticPaused ? 'default' : 'outline'} disabled={!!busy || state.status==='loading'} onClick={()=>action('/admin/whatsapp/pause',{paused:!state.automaticPaused})}>
-        {state.automaticPaused ? 'Retomar envios automáticos' : 'Pausar envios automáticos'}
-      </Button>
-      <p className="wa-footnote">Inclui convites, códigos, mensagens do bot e entradas no grupo. Um envio já iniciado pode concluir. Ao retomar, os convites mantêm o intervalo de 30 segundos.</p>
-    </section>
-    <section className="wa-card">
-      <div className="wa-field"><label htmlFor="wa-engine">Método de ligação</label>
-        <select id="wa-engine" className="wa-group-input" value={state.engine ?? 'baileys'} disabled={!!busy || state.status==='loading'} onChange={async e=>{
-          if(await action('/admin/whatsapp/engine',{engine:e.target.value})){setGroups([]);setSelected(null);setGroupsLoaded(false);setTestResult('');}
-        }} style={{width:'100%',padding:'12px 14px',border:'1px solid #dce4e8',borderRadius:10,background:'white',font:'inherit'}}>
-          <option value="baileys">Baileys</option><option value="webjs">WhatsApp Web · whatsapp-web.js</option><option value="zapi">Z-API</option>
-        </select>
-        <small>Ao mudar, a ligação atual é encerrada e a fila fica em espera. Depois carrega em Ligar por QR.</small>
-      </div>
-    </section>
-    {state.engine==='zapi'&&<ZApiSettings/>}
     <section className="wa-connection">
       <div className="wa-account">
         <div className="wa-account-icon"><MessageCircle size={27} /></div>
@@ -125,6 +105,8 @@ export default function WhatsAppLive() {
       <div className="wa-connection-meta"><span><Smartphone size={14} /> {connected ? 'Ligado por' : 'Método selecionado:'} {engineLabel}</span><span>{connected && state.connectedAt ? `Ligado desde ${new Date(state.connectedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : 'Estado atualizado automaticamente'}</span></div>
       {state.qr && <div className="wa-qr"><img src={state.qr} alt="QR para associar o WhatsApp" width={220} height={220} /><div><h3>Associa o teu telemóvel</h3><p>No WhatsApp, abre <strong>Dispositivos associados</strong> e escolhe <strong>Associar dispositivo</strong>. Depois lê este código.</p></div></div>}
     </section>
+    <nav className="wa-tabs" aria-label="Secções do WhatsApp">{tabs.map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} aria-controls={`wa-section-${id}`} onClick={()=>setTab(id)}>{label}</button>)}</nav>
+    <div id="wa-section-connection" className="wa-tab-panel" hidden={tab!=='connection'}>
     <div className="wa-grid">
       <section className="wa-card">
         <header className="wa-card-heading"><div className="wa-icon"><Users size={20} /></div><div><h2>Grupo do torneio</h2><p>Um grupo. As quatro divisões.</p></div><Button variant="ghost" size="icon" aria-label="Atualizar grupos" title="Atualizar grupos" disabled={!connected || loadingGroups} onClick={loadGroups}><RefreshCw size={16} className={loadingGroups ? 'animate-spin' : ''} /></Button></header>
@@ -155,11 +137,42 @@ export default function WhatsAppLive() {
         </form>
       </section>
     </div>
+    <details className="wa-settings"><summary>Método de ligação e credenciais</summary><div className="wa-tab-panel">
+    <section className="wa-card">
+      <div className="wa-field"><label htmlFor="wa-engine">Método de ligação</label>
+        <select id="wa-engine" className="wa-group-input" value={state.engine ?? 'baileys'} disabled={!!busy || state.status==='loading'} onChange={async e=>{
+          if(await action('/admin/whatsapp/engine',{engine:e.target.value})){setGroups([]);setSelected(null);setGroupsLoaded(false);setTestResult('');}
+        }} style={{width:'100%',padding:'12px 14px',border:'1px solid #dce4e8',borderRadius:10,background:'white',font:'inherit'}}>
+          <option value="baileys">Baileys</option><option value="webjs">WhatsApp Web · whatsapp-web.js</option><option value="zapi">Z-API</option>
+        </select>
+        <small>Ao mudar, a ligação atual é encerrada e a fila fica em espera. Depois carrega em Ligar por QR.</small>
+      </div>
+    </section>
+    {state.engine==='zapi'&&<ZApiSettings/>}
+    </div></details>
+    </div>
+    <div id="wa-section-automation" className="wa-tab-panel" hidden={tab!=='automation'}>
+    <AIResponseControl />
+    <section className="wa-card" aria-label="Envios automáticos">
+      <header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div>
+        <h2>{state.automaticPaused ? 'Envios automáticos pausados' : 'Envios automáticos ativos'}</h2>
+        <p>{state.automaticPaused ? 'A fila está em espera. Podes ligar um número e usar Enviar teste.' : 'Pausa antes de ligar um número apenas para testes.'}</p>
+      </div></header>
+      <Button variant={state.automaticPaused ? 'default' : 'outline'} disabled={!!busy || state.status==='loading'} onClick={()=>action('/admin/whatsapp/pause',{paused:!state.automaticPaused})}>
+        {state.automaticPaused ? 'Retomar envios automáticos' : 'Pausar envios automáticos'}
+      </Button>
+      <p className="wa-footnote">Inclui convites, códigos, mensagens do bot e entradas no grupo. Um envio já iniciado pode concluir. Ao retomar, os convites mantêm o intervalo de 30 segundos.</p>
+    </section>
+    </div>
+    <div id="wa-section-invites" className="wa-tab-panel" hidden={tab!=='invites'}>
     <section className="wa-invite"><div className="wa-icon"><Link2 size={20} /></div><div className="wa-invite-copy"><h2>Inscrições por convite</h2><p>Um link por jogador, válido durante 7 dias. A entrada continua sujeita à tua aprovação.</p></div><InviteDialog connected={connected}/>
       {note && <div className="wa-invite-link"><a href={note}>{note}</a><Button variant="outline" onClick={() => navigator.clipboard.writeText(note).then(() => setCopied(true)).catch(() => setError('Seleciona e copia o link manualmente.'))}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copiado' : 'Copiar link'}</Button></div>}
     </section>
     <InviteHistory connected={connected}/>
+    </div>
+    <div id="wa-section-messages" className="wa-tab-panel" hidden={tab!=='messages'}>
     <MessageCenter />
     <div className="wa-command"><MessageCircle size={17} /><p>Os jogadores podem escrever <code>/escada</code> no grupo para consultar a divisão e o próximo jogo. São identificados pelo número validado no registo.</p></div>
+    </div>
   </div>;
 }

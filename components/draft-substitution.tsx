@@ -1,3 +1,4 @@
+import PlayerPicker from './player-picker';
 import {useState} from 'react';
 import type {Game,Player} from '../lib/tournament';
 import {replaceDraftPlayer} from '../lib/draft-substitution';
@@ -17,9 +18,9 @@ export default function DraftSubstitution({games,players,visible,disabled,onSave
       const next=replaceDraftPlayer(games,players,game.round,game.division,outgoing,incoming);
       if(await onSave(next,`${players.find(p=>p.id===incoming)?.name} substitui ${players.find(p=>p.id===outgoing)?.name} no rascunho ${game.division}, ronda ${game.round}.`)){setOutgoing('');setIncoming('');}
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>
-      <label className="field">Jogador que sai<select required disabled={disabled||busy} value={outgoing} onChange={e=>{setOutgoing(e.target.value);setIncoming('');setError('');}}><option value="">Selecionar jogador</option>{choices.map(p=><option key={p.id} value={p.id}>{p.name} · {p.division}</option>)}</select></label>
-      <label className="field">Suplente que entra<select required disabled={!game||disabled||busy} value={incoming} onChange={e=>setIncoming(e.target.value)}><option value="">Selecionar suplente</option>{candidates.map(p=><option key={p.id} value={p.id}>{p.name} · {p.side}</option>)}</select></label>
-      <Button type="submit" disabled={!game||!incoming||disabled||busy}>{busy?'A guardar…':'Guardar substituição'}</Button>
+      <PlayerPicker label="Jogador que sai" disabled={disabled||busy} value={outgoing} onChange={id=>{setOutgoing(id);setIncoming('');setError('');}} players={choices}/>
+      <PlayerPicker label="Suplente que entra" disabled={!game||disabled||busy} value={incoming} onChange={setIncoming} players={candidates}/>
+      <Button type="submit" disabled={!game||!candidates.some(p=>p.id===incoming)||disabled||busy}>{busy?'A guardar…':'Guardar substituição'}</Button>
     </form>
     {game&&<p>O suplente jogará à {side.toLowerCase()}{incoming&&players.find(p=>p.id===incoming)?.side!==side?' nesta ronda, mesmo tendo outro lado habitual':''}.</p>}
     {game&&!candidates.length&&<p>Não há suplentes aprovados e disponíveis nesta divisão.</p>}

@@ -24,3 +24,19 @@ test('Historical table retains the player historical division and archived score
  assert.equal(months[0].division,'M2+');assert.equal(months[1].division,'M1');
  assert.equal(months[1].rows[0].points,50);assert.equal(months[1].archived,true);
 });
+
+
+test('All four divisions are available with independent positions and safe public fields',()=>{
+ const [current,old]=playerStandings('0',players,[{...game,winner:'a'}],'2026-09',[{month:'2026-08',table:[
+  {id:'4',name:'Other player',division:'M1',points:18,wins:6,losses:0,bonus:0},
+  {id:'0',name:'Player 0',division:'M2+',points:3,wins:1,losses:0,bonus:0}
+ ]}]);
+ assert.deepEqual(current.divisions.map(d=>d.division),['M1+','M1','M2+','M2']);
+ const other=current.divisions.find(d=>d.division==='M1')!;
+ assert.equal(other.rows[0].position,1);assert.equal(other.rows[0].isYou,false);
+ assert.equal(current.divisions.find(d=>d.division==='M2')!.rows.length,0);
+ assert.equal(old.divisions.find(d=>d.division==='M1')!.rows[0].points,18);
+ for(const month of [current,old])for(const division of month.divisions)for(const row of division.rows){
+  assert.deepEqual(Object.keys(row).sort(),['id','name','position','points','wins','losses','bonus','isYou'].sort());
+ }
+});

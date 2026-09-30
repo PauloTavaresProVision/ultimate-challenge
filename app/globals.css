@@ -2305,7 +2305,12 @@ h1 {
 
 .wa-settings>summary{cursor:pointer;font-weight:600;padding:16px;background:white;border:1px solid #dce4e8;border-radius:12px}.wa-settings[open]>summary{margin-bottom:14px}
 
-.player-brands{display:flex;align-items:center;flex-wrap:wrap;gap:24px;margin-bottom:18px}
-.player-brands .player-logo{width:190px;max-width:100%;margin-bottom:0}
-.player-club-logo{display:block;width:116px;height:auto;object-fit:contain;filter:brightness(1.04)}
-@media(max-width:600px){.player-brands{gap:16px}.player-brands .player-logo{width:150px}.player-club-logo{width:88px}}
+/* Blend the official logos into the player page without white image tiles. */
+.player-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:24px 16px;margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #dce5e9}
+.player-brands{display:flex;align-items:center;gap:24px;min-width:0}
+.player-brands .player-logo{width:190px;max-width:100%;margin:0;background:transparent;mix-blend-mode:multiply}
+.player-club-logo{display:block;width:100px;height:auto;object-fit:contain;filter:brightness(1.05);mix-blend-mode:multiply}
+.player-heading{grid-column:1/-1}
+.player-heading h1{margin:0 0 8px;font-size:clamp(28px,5vw,38px);line-height:1.15;letter-spacing:-1px}
+.player-heading p{margin:0;color:#71818a}
+@media(max-width:600px){.player-header{gap:22px 12px;padding-bottom:20px;margin-bottom:20px}.player-brands{gap:16px}.player-brands .player-logo{width:clamp(110px,32vw,150px)}.player-club-logo{width:clamp(64px,18vw,82px)}}

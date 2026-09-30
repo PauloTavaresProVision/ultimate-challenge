@@ -122,8 +122,8 @@ function App() {
   if (me?.role === 'player')
     return (
       <main className="player-page">
-        <div className="section-heading">
-          <div><div className="player-brands"><div className="ultimate-logo player-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div><img className="player-club-logo" src="/premier-padel-club.png" alt="Premier Padel Club" width={1600} height={1108} /></div><h1>Área do jogador</h1>{games&&<p>Olá, {games.people.find(p=>p.id===games.playerId)?.name??'jogador'} · {games.standings?.[0]?.division}</p>}</div>
+        <header className="player-header">
+          <div className="player-brands"><div className="ultimate-logo player-logo"><img src="/ultimate-challenge.png" alt="Ultimate Challenge" /></div><img className="player-club-logo" src="/premier-padel-club.png" alt="Premier Padel Club" width={1600} height={1108} /></div>
           <Button
             variant="outline"
             onClick={async () => {
@@ -133,7 +133,8 @@ function App() {
           >
             Sair
           </Button>
-        </div>
+          <div className="player-heading"><h1>Área do jogador</h1>{games&&<p>Olá, {games.people.find(p=>p.id===games.playerId)?.name??'jogador'} · {games.standings?.[0]?.division}</p>}</div>
+        </header>
         {me.status !== 'Ativo' ? (
           <section className="panel">
             <h2>

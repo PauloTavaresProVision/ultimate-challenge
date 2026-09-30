@@ -2304,3 +2304,8 @@ h1 {
 @media(max-width:600px){.wa-tabs button{flex:1 1 40%;padding:10px}.standing-levels button{flex:1 1 40%}.substitution-form .player-picker{min-width:100%}}
 
 .wa-settings>summary{cursor:pointer;font-weight:600;padding:16px;background:white;border:1px solid #dce4e8;border-radius:12px}.wa-settings[open]>summary{margin-bottom:14px}
+
+.player-brands{display:flex;align-items:center;flex-wrap:wrap;gap:24px;margin-bottom:18px}
+.player-brands .player-logo{width:190px;max-width:100%;margin-bottom:0}
+.player-club-logo{display:block;width:116px;height:auto;object-fit:contain;filter:brightness(1.04)}
+@media(max-width:600px){.player-brands{gap:16px}.player-brands .player-logo{width:150px}.player-club-logo{width:88px}}

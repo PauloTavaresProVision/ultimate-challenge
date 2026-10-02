@@ -1,4 +1,5 @@
-import {GroupQueue,type GroupTurn} from './group-context.ts';
+import {saveIncoming,processIncoming} from './group-inbox.ts';
+import {type GroupTurn} from './group-context.ts';
 import {rememberGroupMessage,groupMessageId} from './group-memory.ts';
 import {retryZApi,zApiRetryDelay} from './zapi-recovery.ts';
 import {handleJourneyConversation} from './journey-conversation.ts';
@@ -88,7 +89,6 @@ export class WhatsApp {
     | 'error' = 'disconnected';
   qr: string | null = null;
   lastError: string | null = null;
-  private seen = new Map<string, number>();
   private receiptChecks=new Map<string,number>();
   private receiptInFlight=new Set<string>();
   async refreshReceipt(id:string){
@@ -336,7 +336,7 @@ export class WhatsApp {
       });
       sock.ev.on('messages.upsert', ({ messages, type }) => {
         if (generation !== this.generation || !this.enabled || type !== 'notify') return;
-        this.handleMessages(messages);
+        void this.handleMessages(messages).catch(()=>console.error('WhatsApp: falha ao guardar mensagens recebidas.'));
       });
     } catch {
       if (generation !== this.generation) return;
@@ -349,71 +349,67 @@ export class WhatsApp {
       this.socket = null;
     }
   }
-  private groupQueue = new GroupQueue();
-  private handleMessages(messages:WAMessage[]) {
-    const sock=this.socket;if(!sock)return;
-        for (const message of messages) {
-          const text =
-            message.message?.conversation ??
-            message.message?.extendedTextMessage?.text ??
-            '';
-          if (!text.trim()) continue;
-          const id = message.key.id;
-          const seenKey=(message.key.remoteJid??'')+':'+id;
-          if (!id || this.seen.has(seenKey)) continue;
-          this.seen.set(seenKey, Date.now());
-          if (this.seen.size > 1000) {
-            const first = this.seen.keys().next().value;
-            if (first) this.seen.delete(first);
-          }
-          if(message.key.fromMe||!/^\/escada(?:\s|$)/i.test(text)) {
-            const group=message.key.remoteJid??'';
-            const queuedAt=Date.now();
-            void this.groupQueue.run(group,async()=>{
-              if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
-              const diagnostic={event:groupMessageId(group,id),waitMs:Date.now()-queuedAt};
-              if(!await botEnabled()){console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'ia_pausada'}));return;}
-              let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
-              if(!phone&&message.key.participant?.endsWith('@lid')&&!message.key.fromMe){
-                const mapped=await sock.signalRepository.lidMapping.getPNForLID(message.key.participant).catch(()=>null);
-                phone=phoneFromJid(mapped);
-              }
-              if(!phone&&!message.key.fromMe){
-                const metadata=await sock.groupMetadata(group).catch(()=>null);
-                const member=metadata?.participants.find(p=>p.id===message.key.participant);
-                phone=phoneFromJid(member?.phoneNumber);
-              }
-              const player=phone?await db.player.findUnique({where:{phone}}):null;
-              const quote=message.message?.extendedTextMessage?.contextInfo;
-              const quoted=quote?.stanzaId??undefined;
-              const quotedText=quote?.quotedMessage?.conversation??quote?.quotedMessage?.extendedTextMessage?.text;
-              const timestamp=Number(message.messageTimestamp)*1000;
-              const at=Number.isFinite(timestamp)&&timestamp>0?Math.min(timestamp,Date.now()):Date.now();
-              const authorId=digest(group+':'+(message.key.fromMe?'connected_account':phone??message.key.participant??id));
-              const turn:GroupTurn={id:groupMessageId(group,id),authorId,
-                authorName:player?.name??message.pushName??(message.key.fromMe?'Conta do clube':'Participante'),
-                displayName:message.pushName??undefined,source:message.key.fromMe?'connected_account':'member',at,text,
-                replyToId:quoted?groupMessageId(group,quoted):undefined,
-                quoted:quoted&&quotedText?{id:groupMessageId(group,quoted),authorId:quote?.participant?digest(group+':'+(phoneFromJid(quote.participant)??quote.participant)):undefined,text:quotedText}:undefined};
-              const context=await rememberGroupMessage(group,turn);
-              // Human conversations and our own messages provide context, never authority to act.
-              if(message.key.fromMe)return;
-              if(text.length>1500||!phone||!player?.verified||player.status!=='Ativo'){
-                console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:text.length>1500?'texto_longo':!phone?'numero_nao_resolvido':!player?'jogador_nao_encontrado':!player.verified?'numero_por_validar':'jogador_nao_ativo'}));return;
-              }
-              console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'analise_iniciada'}));
-              if(await handleJourneyConversation(group,phone,text,id,quoted,context))return;
-              if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
-              await handleAI(group,phone,text,id,context);
-            }).catch(()=>console.error('Não foi possível processar o contexto do grupo; nenhuma resposta automática preparada.'));
-            continue;
-          }
-          void this.onCommand(
-            message.key.remoteJid ?? '',
-            message.key.participant ?? message.key.remoteJid ?? '',
-            message.key.participantAlt ?? message.key.remoteJidAlt ?? null,
-          ).catch(() => {});
-        }
+  private async handleMessages(messages:WAMessage[]) {
+    for(const message of [...messages].sort((a,b)=>Number(a.messageTimestamp)-Number(b.messageTimestamp))) {
+      const text=message.message?.conversation??message.message?.extendedTextMessage?.text??'';
+      if(!text.trim()||!message.key.id)continue;
+      if(message.key.fromMe||!/^\/escada(?:\s|$)/i.test(text)) {
+        await saveIncoming(message);
+      } else {
+        await this.onCommand(message.key.remoteJid??'',message.key.participant??message.key.remoteJid??'',message.key.participantAlt??message.key.remoteJidAlt??null);
+      }
+    }
+  }
+  async receivePending() {
+    await processIncoming(message=>this.processGroupMessage(message),()=>!!this.socket&&this.enabled&&this.status==='connected');
+  }
+  private async processGroupMessage(message:WAMessage) {
+    const sock=this.socket;if(!sock)throw Error('WhatsApp desligado.');
+    const group=message.key.remoteJid!,id=message.key.id!;
+    const text=message.message?.conversation??message.message?.extendedTextMessage?.text??'';
+    if(!message.key.fromMe&&/^\/escada(?:\s|$)/i.test(text)){
+      await this.onCommand(group,message.key.participant??group,message.key.participantAlt??null);
+      return;
+    }
+    if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+    const diagnostic={event:groupMessageId(group,id),waitMs:Date.now()-Number(message.messageTimestamp)*1000};
+    if(!await botEnabled())throw Error('IA pausada.');
+    let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
+    if(!phone&&message.key.participant?.endsWith('@lid')&&!message.key.fromMe){
+      const mapped=await sock.signalRepository.lidMapping.getPNForLID(message.key.participant).catch(()=>null);
+      phone=phoneFromJid(mapped);
+    }
+    if(!phone&&!message.key.fromMe){
+      const metadata=await sock.groupMetadata(group).catch(()=>null);
+      const member=metadata?.participants.find(p=>p.id===message.key.participant);
+      phone=phoneFromJid(member?.phoneNumber);
+    }
+    if(!phone&&!message.key.fromMe)throw Error('Número ainda não resolvido.');
+    const player=phone?await db.player.findUnique({where:{phone}}):null;
+    const quote=message.message?.extendedTextMessage?.contextInfo;
+    const quoted=quote?.stanzaId??undefined;
+    const quotedText=quote?.quotedMessage?.conversation??quote?.quotedMessage?.extendedTextMessage?.text;
+    const timestamp=Number(message.messageTimestamp)*1000;
+    const at=Number.isFinite(timestamp)&&timestamp>0?Math.min(timestamp,Date.now()):Date.now();
+    const authorId=digest(group+':'+(message.key.fromMe?'connected_account':phone??message.key.participant??id));
+    const turn:GroupTurn={id:groupMessageId(group,id),authorId,
+      authorName:player?.name??message.pushName??(message.key.fromMe?'Conta do clube':'Participante'),
+      displayName:message.pushName??undefined,source:message.key.fromMe?'connected_account':'member',at,text,
+      replyToId:quoted?groupMessageId(group,quoted):undefined,
+      quoted:quoted&&quotedText?{id:groupMessageId(group,quoted),authorId:quote?.participant?digest(group+':'+(phoneFromJid(quote.participant)??quote.participant)):undefined,text:quotedText}:undefined};
+    const fresh=await rememberGroupMessage(group,turn);
+    const inbox=await db.groupInbox.findUnique({where:{id:turn.id}});
+    const context=inbox?.encryptedContext?JSON.parse(decrypt(inbox.encryptedContext,config.MESSAGE_KEY)):fresh;
+    if(inbox&&!inbox.encryptedContext)await db.groupInbox.update({where:{id:turn.id},data:{encryptedContext:encrypt(JSON.stringify(context),config.MESSAGE_KEY)}});
+    // Human conversations and our own messages provide context, never authority to act.
+    if(message.key.fromMe)return;
+    if(text.length>1500||!phone||!player?.verified||player.status!=='Ativo'){
+      console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:text.length>1500?'texto_longo':!phone?'numero_nao_resolvido':!player?'jogador_nao_encontrado':!player.verified?'numero_por_validar':'jogador_nao_ativo'}));return;
+    }
+    console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'analise_iniciada'}));
+    if(await handleJourneyConversation(group,phone,text,id,quoted,context))return;
+    if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
+    await handleAI(group,phone,text,id,context);
   }
   private async openWeb(){
     if(!this.enabled)return;
@@ -438,7 +434,7 @@ export class WhatsApp {
             this.timer=setTimeout(()=>{this.timer=null;if(closed===this.generation&&this.enabled)void this.open();},zApiRetryDelay(this.failures));
           }).catch(()=>{if(closed===this.generation){this.enabled=false;this.status='error';this.lastError='Não foi possível encerrar o navegador anterior.';}}).finally(()=>{if(this.closingSocket===closing)this.closingSocket=null;});
         },
-        message:message=>{if(generation===this.generation&&this.enabled)this.handleMessages([message]);},
+        message:async message=>{if(generation!==this.generation||!this.enabled)throw Error('Ligação substituída.');await this.handleMessages([message]);},
         receipt:(id,status)=>{if(generation===this.generation)void this.recordReceipt(id,status).catch(()=>{});},
         joined:(group,ids)=>{if(generation===this.generation)void queueWelcome(group,ids).catch(()=>{});}
       });

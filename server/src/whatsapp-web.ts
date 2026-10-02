@@ -15,7 +15,7 @@ export const webReceipt=(ack:number)=>({[-1]:0,1:2,2:3,3:4,4:5} as Record<number
 
 export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;executablePath?:string;
   qr:(qr:string)=>void;authenticated?:()=>void;ready:()=>void;closed:(revoked:boolean,startupError?:string)=>void;
-  message:(message:WAMessage)=>void;receipt:(id:string,status:number)=>void;joined:(group:string,ids:string[])=>void;
+  message:(message:WAMessage)=>void|Promise<void>;receipt:(id:string,status:number)=>void;joined:(group:string,ids:string[])=>void;
 }, createClient:(options:ClientOptions)=>WebClient=options=>new WWebJS.Client(options)):Promise<MessagingSocket> {
   const lease=new PgClient({connectionString:options.databaseUrl,connectionTimeoutMillis:10000,keepAlive:true});
   let stopped=false,ready=false,closing:Promise<void>|undefined;
@@ -127,7 +127,7 @@ export async function openWebWhatsApp(options:{databaseUrl:string;folder:string;
     const sender=message.author??message.from;
     const phone=await pn(sender);if(stopped||!ready)return;
     const quoted=message.hasQuotedMsg?await message.getQuotedMessage().catch(()=>null):null;
-    options.message({key:{id:message.id._serialized,remoteJid:group,fromMe:message.fromMe,participant:fromWebId(sender),participantAlt:phone??undefined},
+    await options.message({key:{id:message.id._serialized,remoteJid:group,fromMe:message.fromMe,participant:fromWebId(sender),participantAlt:phone??undefined},
       messageTimestamp:message.timestamp,
       message:{extendedTextMessage:{text:message.body,contextInfo:quoted?{stanzaId:quoted.id._serialized,participant:fromWebId(quoted.author??quoted.from),quotedMessage:{conversation:quoted.body}}:undefined}}});
   }).catch(()=>console.error('WhatsApp Web: falha ao ler mensagem do grupo.'));});

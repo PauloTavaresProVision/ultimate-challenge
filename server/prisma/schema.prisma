@@ -104,6 +104,22 @@ model Setting {
   key String @id
   value String
 }
+model GroupInbox {
+  id String @id
+  sequence BigInt @unique @default(autoincrement())
+  group String
+  messageAt DateTime
+  receivedAt DateTime @default(now())
+  encryptedPayload String
+  encryptedContext String?
+  encryptedDecision String?
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  completedAt DateTime?
+  lastError String?
+  @@index([group,status,messageAt,sequence])
+}
 model WhatsAppAuthSession {
   id String @id
   status String

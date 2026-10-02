@@ -6,6 +6,7 @@ import {config} from './config.ts';
 import {encrypt,decrypt} from './security.ts';
 import {ZApiClient,zReceipt,zMessageId,zJid,type ZCredentials} from './zapi-client.ts';
 import {nextReceipt} from './whatsapp-receipts.ts';
+import {saveIncoming} from './group-inbox.ts';
 const key='zapi-credentials';
 export type ZSettings=ZCredentials&{webhookSecret:string};
 export async function loadZSettings():Promise<ZSettings|null>{const row=await db.setting.findUnique({where:{key}});return row?JSON.parse(decrypt(row.value,config.MESSAGE_KEY)):null;}
@@ -34,6 +35,18 @@ export function installZWebhook(app:Express){
     const engine=await db.setting.findUnique({where:{key:'whatsapp_engine'}});
     const group=await db.setting.findUnique({where:{key:'whatsapp_group'}});
     if(engine?.value!=='zapi'||group?.value!==zJid(req.body.phone))return res.sendStatus(200);
+    const p=req.body;
+    if(!p.isEdit&&!p.waitingMessage&&typeof p.text?.message==='string'&&typeof p.messageId==='string'){
+      const phone=typeof p.participantPhone==='string'&&/^\d+$/.test(p.participantPhone)?zJid(p.participantPhone):undefined;
+      const lid=typeof p.participantLid==='string'&&p.participantLid.endsWith('@lid')?p.participantLid:undefined;
+      if(phone&&lid)await db.setting.upsert({where:{key:'zapi-lid:'+s.instanceId+':'+lid},create:{key:'zapi-lid:'+s.instanceId+':'+lid,value:phone},update:{value:phone}});
+      await saveIncoming({pushName:typeof p.senderName==='string'?p.senderName:undefined,
+        messageTimestamp:Number.isFinite(Number(p.momment))?Math.floor(Number(p.momment)/1000):undefined,
+        key:{id:p.messageId,remoteJid:group.value,participant:lid??phone,participantAlt:phone,fromMe:p.fromMe===true},
+        message:{extendedTextMessage:{text:p.text.message,contextInfo:{stanzaId:p.referenceMessageId??undefined}}}});
+      // Acknowledge only after durable storage. Interpretation runs separately.
+      if(!p.notification)return res.sendStatus(200);
+    }
     const text=JSON.stringify(req.body);const id='zapi-inbox:'+s.instanceId+':'+createHash('sha256').update(text).digest('hex');
     await db.setting.upsert({where:{key:id},create:{key:id,value:encrypt(text,config.MESSAGE_KEY)},update:{}});
     res.sendStatus(200);

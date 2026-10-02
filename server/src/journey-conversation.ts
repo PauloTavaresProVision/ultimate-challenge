@@ -4,7 +4,8 @@ import {resolveJourneyReference} from './journey-reference.ts';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { decrypt, encrypt, digest } from './security.ts';
-import { interpretParticipation, PARTICIPATION_VERSION } from './journey-ai.ts';
+import { interpretParticipation, PARTICIPATION_VERSION, journeyDecision } from './journey-ai.ts';
+import {groupMessageId} from './group-memory.ts';
 import { listJourneys, handleJourney } from './journeys.ts';
 const serial = new Map<string, Promise<unknown>>();
 export async function handleJourneyConversation(
@@ -47,6 +48,9 @@ export async function handleJourneyConversation(
       let stage='credenciais';
       const started=Date.now();
       try {
+        const inboxId=groupMessageId(group,eventId);
+        const inbox=await db.groupInbox.findUnique({where:{id:inboxId}});
+        const cached=inbox?.encryptedDecision?journeyDecision.parse(JSON.parse(decrypt(inbox.encryptedDecision,config.MESSAGE_KEY))):null;
         const key = await db.setting.findUnique({
           where: { key: 'openai_key' },
         });
@@ -66,11 +70,11 @@ export async function handleJourneyConversation(
           },
           update: { count: { increment: 1 } },
         });
-        if (rate.count > 8) throw Error();
+        if (!cached && rate.count > 8) throw Error();
         stage='referencia_da_mensagem';
         const quoted = quotedId ? await resolveJourneyReference(db,group,quotedId,journeys) : null;
         stage='interpretacao_ia';
-        const decision = await interpretParticipation(
+        const decision = cached ?? await interpretParticipation(
           decrypt(key.value, config.MESSAGE_KEY),
           text,
           {
@@ -78,7 +82,7 @@ export async function handleJourneyConversation(
             authorId: groupConversation?.currentMessage.authorId,
             groupConversation,
             division: player.division,
-            today: new Date().toISOString(),
+            today: new Date(groupConversation?.currentMessage.at??Date.now()).toISOString(),
             quotedJourney: quoted,
             history,
             journeys: journeys.map((j) => ({
@@ -96,6 +100,7 @@ export async function handleJourneyConversation(
           fetch,
           value=>{const v=value as {phase?:string;permission?:string;action?:string;addressee?:string;purpose?:string};console.info('WhatsApp interpretação:',JSON.stringify({event:digest(group+':'+eventId),phase:v.phase,permission:v.permission,action:v.action,addressee:v.addressee,purpose:v.purpose,elapsedMs:Date.now()-started,quoted:!!quotedId,referenceResolved:!!quoted}));},
         );
+        if(inbox&&!cached)await db.groupInbox.update({where:{id:inboxId},data:{encryptedDecision:encrypt(JSON.stringify(decision),config.MESSAGE_KEY)}});
         console.info('WhatsApp participação:',JSON.stringify({version:PARTICIPATION_VERSION,event:digest(group+':'+eventId),action:decision.action,targetResolved:!!decision.journeyId,openJourneys:journeys.filter(j=>j.status==='open').length}));
         if (!await botEnabled()) return true;
         if (decision.action === 'silent') {
@@ -135,10 +140,10 @@ export async function handleJourneyConversation(
           });
         } else await db.setting.deleteMany({ where: { key: memoryKey } });
         return handled;
-      } catch {
+      } catch (error) {
         if (processed || !await botEnabled()) return true;
         console.error('WhatsApp participação falhou:',JSON.stringify({event:digest(group+':'+eventId),stage,elapsedMs:Date.now()-started}));
-        return true;
+        throw error;
       }
     });
   serial.set(serialKey, work);

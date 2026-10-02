@@ -337,8 +337,10 @@ app.get('/api/admin/whatsapp', auth, admin, async (_req, res) => {
   });
   const groupName = await db.setting.findUnique({ where: { key: 'whatsapp_group_name' } });
   const warning=wa.engine==='zapi'?(await db.setting.findUnique({where:{key:'zapi-queue-warning'}}))?.value:null;
+  const incoming=group?.value?await db.groupInbox.count({where:{group:group.value,status:'pending'}}):0;
+  const recovering=group?.value?await db.groupInbox.count({where:{group:group.value,status:'pending',lastError:{not:null}}}):0;
   res.json({ automaticPaused:await automaticPaused(), engine:wa.engine, status: wa.status, lastError: wa.lastError ?? wa.sendingPausedReason, qr: wa.qr, groupId: group?.value ?? null,
-    warning:warning||null, groupName: groupName?.value ?? null, account: wa.account,
+    warning:warning||null, incoming:{pending:incoming,recovering}, groupName: groupName?.value ?? null, account: wa.account,
     connectedAt: wa.status === 'connected' ? wa.connectedAt : null });
 });
 app.post('/api/admin/whatsapp/pause', auth, admin, async (req,res)=>{
@@ -517,6 +519,7 @@ app.use(
 );
 const timer = setInterval(() => {
   void wa.deliver().catch(() => {});
+  void wa.receivePending().catch(()=>console.error('WhatsApp: fila de receção aguarda recuperação.'));
 }, 2000);
 const welcomeTimer=setInterval(()=>{
   void wa.reconcileWelcomes().catch(()=>console.error('WhatsApp: falha ao verificar boas-vindas em falta.'));
@@ -526,6 +529,7 @@ const tickCompetition=async()=>{if(competitionRunning)return;competitionRunning=
 const competitionTimer=setInterval(()=>void tickCompetition(),60000);
 void tickCompetition();
 const cleanup = setInterval(() => {
+  void db.groupInbox.deleteMany({where:{status:{in:['done','paused']},completedAt:{lt:new Date(Date.now()-30*86400000)}}}).catch(()=>{});
   void pruneGroupMemory().catch(()=>console.error("Não foi possível limpar o contexto antigo do grupo."));
   void db.outbox
     .updateMany({

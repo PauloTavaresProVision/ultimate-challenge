@@ -31,7 +31,7 @@ export async function api<T = any>(
   return data;
 }
 type Group = { id: string; name: string };
-type Connection = { warning?: string | null; automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
+type Connection = { incoming?: {pending:number;recovering:number}; warning?: string | null; automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [tab,setTab]=useState('connection');
   const tabs=[['connection','Ligação e grupo'],['automation','Envios e IA'],['invites','Convites'],['messages','Mensagens']];
@@ -153,6 +153,13 @@ export default function WhatsAppLive() {
     </div>
     <div id="wa-section-automation" className="wa-tab-panel" hidden={tab!=='automation'}>
     <AIResponseControl />
+    <section className="wa-card" aria-label="Pedidos recebidos">
+      <header className="wa-card-heading"><div className="wa-icon"><MessageCircle size={20}/></div><div>
+        <h2>Pedidos recebidos</h2>
+        <p>{state.incoming ? state.incoming.pending ? `${state.incoming.pending} mensagens aguardam processamento.` : 'Não há mensagens por processar.' : 'A consultar os pedidos recebidos…'}</p>
+      </div></header>
+      <p className="wa-footnote">{state.incoming?.recovering ? 'Um pedido está a ser recuperado automaticamente. Os seguintes aguardam para respeitar a ordem de inscrição.' : 'Os pedidos ficam guardados até serem processados. Se houver uma falha, o sistema tenta novamente.'}</p>
+    </section>
     <section className="wa-card" aria-label="Envios automáticos">
       <header className="wa-card-heading"><div className="wa-icon"><Send size={20}/></div><div>
         <h2>{state.automaticPaused ? 'Envios automáticos pausados' : 'Envios automáticos ativos'}</h2>

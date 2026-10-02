@@ -80,7 +80,7 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
         if(qr.challenge)throw new Error('Z-API: conclui a chave de acesso no painel Z-API e volta a ligar aqui.');
         if(typeof qr.value!=='string'||!qr.value.startsWith('data:image/png;base64,'))throw new Error('A Z-API não devolveu uma imagem QR válida.');options.qr(qr.value);
       }
-      const inbox=connected?await db.setting.findMany({where:{key:{startsWith:'zapi-inbox:'+settings.instanceId+':'}},take:100}):[];
+      const inbox=connected?await db.setting.findMany({where:{key:{startsWith:'zapi-inbox:'+settings.instanceId+':'}}}):[];
       const events=inbox.map(row=>({row,p:JSON.parse(decrypt(row.value,config.MESSAGE_KEY))})).sort((a,b)=>(Number(a.p.momment)||0)-(Number(b.p.momment)||0));
       for(const {row,p} of events){if(stopped)return;
         if(p.instanceId!==settings.instanceId)continue;
@@ -91,7 +91,7 @@ export async function openZApi(options:Options):Promise<MessagingSocket>{
             const phone=typeof p.participantPhone==='string'&&/^\d+$/.test(p.participantPhone)?zJid(p.participantPhone):undefined;
             const lid=typeof p.participantLid==='string'&&p.participantLid.endsWith('@lid')?p.participantLid:undefined;
             if(phone&&lid)await db.setting.upsert({where:{key:'zapi-lid:'+settings.instanceId+':'+lid},create:{key:'zapi-lid:'+settings.instanceId+':'+lid,value:phone},update:{value:phone}});
-            if(phone||lid||p.fromMe)options.message({pushName:typeof p.senderName==='string'?p.senderName:undefined,messageTimestamp:Number.isFinite(Number(p.momment))?Math.floor(Number(p.momment)/1000):undefined,key:{id:p.messageId,remoteJid:group,participant:lid??phone,participantAlt:phone,fromMe:p.fromMe===true},message:{extendedTextMessage:{text:p.text.message,contextInfo:{stanzaId:p.referenceMessageId??undefined}}}});
+            if(phone||lid||p.fromMe)await options.message({pushName:typeof p.senderName==='string'?p.senderName:undefined,messageTimestamp:Number.isFinite(Number(p.momment))?Math.floor(Number(p.momment)/1000):undefined,key:{id:p.messageId,remoteJid:group,participant:lid??phone,participantAlt:phone,fromMe:p.fromMe===true},message:{extendedTextMessage:{text:p.text.message,contextInfo:{stanzaId:p.referenceMessageId??undefined}}}});
           }
         }
         await db.setting.delete({where:{key:row.key}});

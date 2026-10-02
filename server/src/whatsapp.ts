@@ -368,9 +368,16 @@ export class WhatsApp {
           }
           if(message.key.fromMe||!/^\/escada(?:\s|$)/i.test(text)) {
             const group=message.key.remoteJid??'';
+            const queuedAt=Date.now();
             void this.groupQueue.run(group,async()=>{
-              if(!await botEnabled()||(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+              if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+              const diagnostic={event:groupMessageId(group,id),waitMs:Date.now()-queuedAt};
+              if(!await botEnabled()){console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'ia_pausada'}));return;}
               let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
+              if(!phone&&message.key.participant?.endsWith('@lid')&&!message.key.fromMe){
+                const mapped=await sock.signalRepository.lidMapping.getPNForLID(message.key.participant).catch(()=>null);
+                phone=phoneFromJid(mapped);
+              }
               if(!phone&&!message.key.fromMe){
                 const metadata=await sock.groupMetadata(group).catch(()=>null);
                 const member=metadata?.participants.find(p=>p.id===message.key.participant);
@@ -390,7 +397,11 @@ export class WhatsApp {
                 quoted:quoted&&quotedText?{id:groupMessageId(group,quoted),authorId:quote?.participant?digest(group+':'+(phoneFromJid(quote.participant)??quote.participant)):undefined,text:quotedText}:undefined};
               const context=await rememberGroupMessage(group,turn);
               // Human conversations and our own messages provide context, never authority to act.
-              if(message.key.fromMe||text.length>1500||!phone||!player?.verified||player.status!=='Ativo')return;
+              if(message.key.fromMe)return;
+              if(text.length>1500||!phone||!player?.verified||player.status!=='Ativo'){
+                console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:text.length>1500?'texto_longo':!phone?'numero_nao_resolvido':!player?'jogador_nao_encontrado':!player.verified?'numero_por_validar':'jogador_nao_ativo'}));return;
+              }
+              console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'analise_iniciada'}));
               if(await handleJourneyConversation(group,phone,text,id,quoted,context))return;
               if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
               await handleAI(group,phone,text,id,context);

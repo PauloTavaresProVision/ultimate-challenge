@@ -1,5 +1,5 @@
 import {routeGroupIntervention,permittedIntervention} from './group-intervention.ts';
-import {groupContextInstructions,type GroupContext} from './group-context.ts';
+import {groupContextInstructions,verifiedJourneyContext,type GroupContext} from './group-context.ts';
 import { z } from 'zod';
 export const journeyDecision = z
   .object({
@@ -18,11 +18,12 @@ export async function interpretJourneyAction(
 ) {
   try {
     const raw = context as {journeys?: Array<{date:string}>;groupConversation?:GroupContext;quotedJourney?:string|null};
-    const conversation=raw.groupConversation;
+    const verifiedQuote=!!raw.quotedJourney&&allowedIds.includes(raw.quotedJourney);
+    const conversation=verifiedJourneyContext(raw.groupConversation,verifiedQuote);
     const replied=conversation?.repliedMessage;
-    const replySource=replied&&'source' in replied?replied.source:(raw.quotedJourney&&allowedIds.includes(raw.quotedJourney)?'platform':null);
+    const replySource=verifiedQuote?'platform':replied&&'source' in replied?replied.source:null;
     const repliedAudience=replied&&'audienceIds' in replied?replied.audienceIds:undefined;
-    const enrichedContext = {...context, replyFacts:conversation?{hasExplicitReply:!!conversation.currentMessage.replyToId,replySource,replyIsToOtherPerson:!!repliedAudience?.length&&!repliedAudience.includes(conversation.currentMessage.authorId)}:undefined, journeys: raw.journeys?.map(j=>({...j,
+    const enrichedContext = {...context, groupConversation:conversation, replyFacts:conversation?{hasExplicitReply:!!conversation.currentMessage.replyToId,replySource,replyIsToOtherPerson:!!repliedAudience?.length&&!repliedAudience.includes(conversation.currentMessage.authorId)}:undefined, journeys: raw.journeys?.map(j=>({...j,
       weekday: new Intl.DateTimeFormat('pt-PT',{weekday:'long',timeZone:'Africa/Luanda'}).format(new Date(j.date+'T12:00:00+01:00'))
     }))};
     const r = await fetcher('https://api.openai.com/v1/responses', {
@@ -135,7 +136,7 @@ Usa today e as datas reais no fuso Africa/Luanda para interpretar qualquer refer
   }
 }
 
-export const PARTICIPATION_VERSION='group-context-v4';
+export const PARTICIPATION_VERSION='group-context-v5';
 export async function interpretParticipation(key:string,text:string,context:object,allowedIds:string[],fetcher:typeof fetch=fetch,trace?:(value:object)=>void):Promise<JourneyDecision>{
  try{
   const routing=await routeGroupIntervention(key,text,context,fetcher);

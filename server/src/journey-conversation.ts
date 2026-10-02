@@ -44,11 +44,14 @@ export async function handleJourneyConversation(
         } catch {}
       }
       let processed = false;
+      let stage='credenciais';
+      const started=Date.now();
       try {
         const key = await db.setting.findUnique({
           where: { key: 'openai_key' },
         });
         if (!key) throw Error();
+        stage='limite_de_pedidos';
         const rateKey =
           'journey-ai:' +
           serialKey +
@@ -64,7 +67,9 @@ export async function handleJourneyConversation(
           update: { count: { increment: 1 } },
         });
         if (rate.count > 8) throw Error();
+        stage='referencia_da_mensagem';
         const quoted = quotedId ? await resolveJourneyReference(db,group,quotedId,journeys) : null;
+        stage='interpretacao_ia';
         const decision = await interpretParticipation(
           decrypt(key.value, config.MESSAGE_KEY),
           text,
@@ -88,6 +93,8 @@ export async function handleJourneyConversation(
             })),
           },
           journeys.map((j) => j.id),
+          fetch,
+          value=>{const v=value as {phase?:string;permission?:string;action?:string;addressee?:string;purpose?:string};console.info('WhatsApp interpretação:',JSON.stringify({event:digest(group+':'+eventId),phase:v.phase,permission:v.permission,action:v.action,addressee:v.addressee,purpose:v.purpose,elapsedMs:Date.now()-started,quoted:!!quotedId,referenceResolved:!!quoted}));},
         );
         console.info('WhatsApp participação:',JSON.stringify({version:PARTICIPATION_VERSION,event:digest(group+':'+eventId),action:decision.action,targetResolved:!!decision.journeyId,openJourneys:journeys.filter(j=>j.status==='open').length}));
         if (!await botEnabled()) return true;
@@ -99,6 +106,7 @@ export async function handleJourneyConversation(
           await db.setting.deleteMany({ where: { key: memoryKey } });
           return false;
         }
+        stage='registo_e_confirmacao';
         const handled = await handleJourney(
           group,
           phone,
@@ -129,7 +137,7 @@ export async function handleJourneyConversation(
         return handled;
       } catch {
         if (processed || !await botEnabled()) return true;
-        console.error('Não foi possível classificar a mensagem do grupo; nenhuma resposta automática preparada.');
+        console.error('WhatsApp participação falhou:',JSON.stringify({event:digest(group+':'+eventId),stage,elapsedMs:Date.now()-started}));
         return true;
       }
     });

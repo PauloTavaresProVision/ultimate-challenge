@@ -63,3 +63,25 @@ test('Closed or absent journeys do not claim registrations are open',async()=>{
   });
  }
 });
+
+
+test('Verified outbox journey reply overrides a human-labelled provider echo in both AI stages',async()=>{
+ const parent=turn('a','club','Lista de inscritos M2+',{source:'connected_account'});
+ const current=turn('b','Luis','In',{replyToId:'a'});
+ const context={quotedJourney:'one',groupConversation:groupContext([parent],current)};
+ assert.equal(permittedIntervention(route(),'In',context),'participation');
+ const result=await interpretParticipation('fake','In',context,['one'],async(_url,options)=>{
+  const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input);
+  if(request.text.format.name==='group_intervention'){
+   assert.equal(input.repliedMessage.source,'platform');
+   assert.equal(input.previousMessages[0].source,'platform');
+   return envelope(route());
+  }
+  assert.equal(input.context.replyFacts.replySource,'platform');
+  assert.equal(input.context.groupConversation.repliedMessage.source,'platform');
+  return envelope({speechAct:'independent_request',explicitPlatformRequest:false,basisMessageId:null,scope:'personal_participation',addressedTo:'assistant',personalRequest:true,action:'join',journeyId:'one'});
+ });
+ assert.deepEqual(result,{action:'join',journeyId:'one'});
+ assert.equal((context.groupConversation.repliedMessage as GroupTurn)?.source,'connected_account');
+ assert.equal(permittedIntervention(route(),'In',{groupConversation:context.groupConversation}),'silent');
+});

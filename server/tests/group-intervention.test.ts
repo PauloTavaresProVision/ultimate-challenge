@@ -6,10 +6,10 @@ import {groupContext,type GroupTurn} from '../src/group-context.ts';
 const turn=(id:string,authorId:string,text:string,extra:Partial<GroupTurn>={}):GroupTurn=>({id,authorId,authorName:authorId,text,source:'member',at:1,...extra});
 const envelope=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
 const route=(extra:Partial<GroupRouting>={}):GroupRouting=>({reason:'Pedido pessoal à plataforma.',addressee:'platform',purpose:'participation',dependsOnMessageId:null,platformVocative:null,...extra});
-test('Observer receives only conversation, never available journeys or enrolment memory',async()=>{
- const r=await routeGroupIntervention('fake','Amanhã faço alteração',{division:'M1+',journeys:[{id:'secret-target'}],history:{action:'join'}},async(_url,options)=>{
+test('Observer receives open-registration availability but no target IDs or enrolment memory',async()=>{
+ const r=await routeGroupIntervention('fake','Amanhã faço alteração',{division:'M1+',journeys:[{id:'secret-target',status:'open'}],history:{action:'join'}},async(_url,options)=>{
   const request=JSON.parse(String(options?.body));
-  const input=JSON.parse(request.input);assert.equal(input.currentMessage.text,'Amanhã faço alteração');
+  const input=JSON.parse(request.input);assert.equal(input.currentMessage.text,'Amanhã faço alteração');assert.equal(input.registrationContext.hasOpenRegistrations,true);
   assert.ok(!request.input.includes('secret-target'));assert.ok(!('history' in input));assert.ok(!('division' in input));assert.equal(request.temperature,0);assert.equal(request.store,false);
   return envelope(route({addressee:'human',purpose:'no_request'}));
  });assert.equal(r.addressee,'human');
@@ -51,4 +51,15 @@ test('Observer failures do not fall through to a planner or leak provider respon
  let calls=0;
  await assert.rejects(interpretParticipation('secret','in',{},[],async()=>{calls++;return new Response('secret',{status:500});}),e=>e instanceof Error&&!e.message.includes('secret'));
  assert.equal(calls,1);
+});
+
+
+test('Closed or absent journeys do not claim registrations are open',async()=>{
+ for(const journeys of [undefined,[],[{status:'closed'}],[{status:'drawn'}]]){
+  await routeGroupIntervention('fake','Olá',{journeys},async(_url,options)=>{
+   const input=JSON.parse(JSON.parse(String(options?.body)).input);
+   assert.equal(input.registrationContext.hasOpenRegistrations,false);
+   return envelope(route({purpose:'no_request'}));
+  });
+ }
 });

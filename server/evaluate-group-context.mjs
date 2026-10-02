@@ -11,6 +11,16 @@ const absent=message('1','Alexandre','Boa noite Nelinho, não vou conseguir joga
 const question=message('2','Pedro','João, vens jogar amanhã?');
 const platformQuestion=message('2','Ultimate Challenge','Pretendes entrar em M1+ no dia 23 ou no dia 30?',{source:'platform',audienceIds:['João']});
 const cases=[
+ {label:'In sem histórico com uma única jornada aberta',history:[],current:message('3','João','In'),expected:'join',journeyId:'first',single:true},
+ {label:'Estou dentro sem histórico com uma única jornada aberta',history:[],current:message('3','João','Estou dentro'),expected:'join',journeyId:'first',single:true},
+ {label:'In sem citar anúncio',history:[announcement],current:message('3','João','In'),expected:'join',journeyId:'first'},
+ {label:'Estou dentro sem citar anúncio',history:[announcement],current:message('3','João','Estou dentro'),expected:'join',journeyId:'first'},
+ {label:'In sem anúncio no histórico e duas datas',history:[],current:message('3','João','In'),expected:'join'},
+ {label:'Estou dentro após conversa de outros',history:[absent,message('2','Nelinho','Amanhã faço alteração')],current:message('3','João','Estou dentro'),expected:'join'},
+ {label:'Adesão após confirmação de outro jogador',history:[announcement,message('2','Ultimate Challenge','Pedro, estás confirmado!',{source:'platform',audienceIds:['Pedro']})],current:message('3','João','In'),expected:'join',journeyId:'first'},
+ {label:'Adesão informal sem vocabulário fixo',history:[announcement],current:message('3','João','Guardem-me um lugar, também vou jogar!'),expected:'join',journeyId:'first'},
+ {label:'Estou dentro dirigido a pessoa',history:[question],current:message('3','João','Estou dentro',{replyToId:'2'}),expected:'silent'},
+ {label:'Adesão a jantar entre pessoas',history:[message('1','Pedro','João, vens jantar connosco?')],current:message('3','João','Estou dentro'),expected:'silent'},
  {label:'Ausência dirigida ao organizador',history:[announcement],current:absent,expected:'silent'},
  {label:'Organizador continua conversa sem repetir o nome',history:[announcement,absent],current:message('3','Nelinho','Amanhã faço alteração'),expected:'silent'},
  {label:'Resposta citada a pessoa',history:[question],current:message('3','João','Sim, conta comigo',{replyToId:'2'}),expected:'silent'},
@@ -38,7 +48,7 @@ try{
  let failed=0;
  for(const c of cases){
   const trace=[];
-  const decision=await interpretParticipation(key,c.current.text,{authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:false},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:false}]},['first','second'],fetch,value=>trace.push(value));
+  const decision=await interpretParticipation(key,c.current.text,{authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:false},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:false}].slice(0,c.single?1:2)},c.single?['first']:['first','second'],fetch,value=>trace.push(value));
   const ok=decision.action===c.expected&&(!c.journeyId||decision.journeyId===c.journeyId);
   if(!ok){failed++;console.log('DIAGNÓSTICO:',JSON.stringify(trace));}
   console.log(`${ok?'OK':'FALHOU'} | ${c.label} | esperado: ${c.expected}${c.journeyId?'/'+c.journeyId:''} | obtido: ${decision.action}/${decision.journeyId??'-'}`);

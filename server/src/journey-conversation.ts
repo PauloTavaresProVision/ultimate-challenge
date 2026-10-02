@@ -4,7 +4,7 @@ import {resolveJourneyReference} from './journey-reference.ts';
 import { db } from './db.ts';
 import { config } from './config.ts';
 import { decrypt, encrypt, digest } from './security.ts';
-import { interpretParticipation } from './journey-ai.ts';
+import { interpretParticipation, PARTICIPATION_VERSION } from './journey-ai.ts';
 import { listJourneys, handleJourney } from './journeys.ts';
 const serial = new Map<string, Promise<unknown>>();
 export async function handleJourneyConversation(
@@ -89,6 +89,7 @@ export async function handleJourneyConversation(
           },
           journeys.map((j) => j.id),
         );
+        console.info('WhatsApp participação:',JSON.stringify({version:PARTICIPATION_VERSION,event:digest(group+':'+eventId),action:decision.action,targetResolved:!!decision.journeyId,openJourneys:journeys.filter(j=>j.status==='open').length}));
         if (!await botEnabled()) return true;
         if (decision.action === 'silent') {
           await db.setting.deleteMany({where:{key:memoryKey}});

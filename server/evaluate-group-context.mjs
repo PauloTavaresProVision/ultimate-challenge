@@ -11,6 +11,13 @@ const absent=message('1','Alexandre','Boa noite Nelinho, não vou conseguir joga
 const question=message('2','Pedro','João, vens jogar amanhã?');
 const platformQuestion=message('2','Ultimate Challenge','Pretendes entrar em M1+ no dia 23 ou no dia 30?',{source:'platform',audienceIds:['João']});
 const cases=[
+ {label:'Out autónomo com inscrição própria',history:[],current:message('3','Diogo','out'),enrolled:true,expected:'leave',journeyId:'first'},
+ {label:'Desistência informal com inscrição própria',history:[],current:message('3','Diogo','estou fora desta vez'),enrolled:true,expected:'leave',journeyId:'first'},
+ {label:'Out não cancela terceiros',history:[],current:message('3','Diogo','O João está out'),enrolled:true,expected:'silent'},
+ {label:'Fora refere-se a bola',history:[],current:message('3','Diogo','Essa bola foi out 😂'),enrolled:true,expected:'silent'},
+ {label:'Negação de desistência',history:[],current:message('3','Diogo','Não estou out, continuo inscrito'),enrolled:true,expected:'silent'},
+ {label:'Out dirigido a uma pessoa',history:[message('1','Pedro','Diogo, vens jantar?')],current:message('3','Diogo','out',{replyToId:'1'}),enrolled:true,expected:'silent'},
+ {label:'Out com duas inscrições exige escolha',history:[],current:message('3','Diogo','out'),enrolled:true,bothEnrolled:true,expected:'leave',nullJourney:true},
  {label:'In responde a lista validada mas eco marcado humano',history:[{...announcement,source:'connected_account'}],current:message('3','João','In',{replyToId:'0'}),expected:'join',journeyId:'first',verifiedQuote:'first'},
  {label:'In responde a anúncio validado fora do histórico',history:[],current:message('3','João','In',{replyToId:'0'}),expected:'join',journeyId:'first',verifiedQuote:'first'},
  {label:'In sem histórico com uma única jornada aberta',history:[],current:message('3','João','In'),expected:'join',journeyId:'first',single:true},
@@ -50,8 +57,8 @@ try{
  let failed=0;
  for(const c of cases){
   const trace=[];
-  const decision=await interpretParticipation(key,c.current.text,{quotedJourney:c.verifiedQuote??null,authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:false},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:false}].slice(0,c.single?1:2)},c.single?['first']:['first','second'],fetch,value=>trace.push(value));
-  const ok=decision.action===c.expected&&(!c.journeyId||decision.journeyId===c.journeyId);
+  const decision=await interpretParticipation(key,c.current.text,{quotedJourney:c.verifiedQuote??null,authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:!!c.enrolled},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:!!c.bothEnrolled}].slice(0,c.single?1:2)},c.single?['first']:['first','second'],fetch,value=>trace.push(value));
+  const ok=(!c.nullJourney||decision.journeyId===null)&&decision.action===c.expected&&(!c.journeyId||decision.journeyId===c.journeyId);
   if(!ok){failed++;console.log('DIAGNÓSTICO:',JSON.stringify(trace));}
   console.log(`${ok?'OK':'FALHOU'} | ${c.label} | esperado: ${c.expected}${c.journeyId?'/'+c.journeyId:''} | obtido: ${decision.action}/${decision.journeyId??'-'}`);
  }

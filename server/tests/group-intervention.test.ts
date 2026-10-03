@@ -6,6 +6,23 @@ import {groupContext,type GroupTurn} from '../src/group-context.ts';
 const turn=(id:string,authorId:string,text:string,extra:Partial<GroupTurn>={}):GroupTurn=>({id,authorId,authorName:authorId,text,source:'member',at:1,...extra});
 const envelope=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
 const route=(extra:Partial<GroupRouting>={}):GroupRouting=>({reason:'Pedido pessoal à plataforma.',addressee:'platform',purpose:'participation',dependsOnMessageId:null,platformVocative:null,...extra});
+
+test('Withdrawal router receives own enrolment even when registrations are closed, without target IDs',async()=>{
+ for(const enrolled of [true,false])await routeGroupIntervention('fake','out',{journeys:[{id:'private-id',status:'closed',enrolled}]},async(_url,options)=>{
+  const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input);
+  assert.equal(input.registrationContext.authorHasUpcomingEnrollment,enrolled);
+  assert.equal(input.registrationContext.hasOpenRegistrations,false);
+  assert.ok(!request.input.includes('private-id'));
+  return envelope(route());
+ });
+});
+test('AI withdrawal decision reaches the executor contract without being converted to a join',async()=>{
+ const result=await interpretParticipation('fake','out',{journeys:[{id:'one',date:'2026-10-07',status:'open',enrolled:true}]},['one'],async(_url,options)=>{
+  const request=JSON.parse(String(options?.body));
+  return envelope(request.text.format.name==='group_intervention'?route():{speechAct:'independent_request',explicitPlatformRequest:false,basisMessageId:null,scope:'personal_participation',addressedTo:'assistant',personalRequest:true,action:'leave',journeyId:'one'});
+ });
+ assert.deepEqual(result,{action:'leave',journeyId:'one'});
+});
 test('Observer receives open-registration availability but no target IDs or enrolment memory',async()=>{
  const r=await routeGroupIntervention('fake','Amanhã faço alteração',{division:'M1+',journeys:[{id:'secret-target',status:'open'}],history:{action:'join'}},async(_url,options)=>{
   const request=JSON.parse(String(options?.body));

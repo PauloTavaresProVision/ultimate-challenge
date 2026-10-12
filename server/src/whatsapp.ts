@@ -1,3 +1,4 @@
+import type {PreparedIncoming,IncomingCommit} from './incoming-queue.ts';
 import {saveIncoming,processIncoming} from './group-inbox.ts';
 import {type GroupTurn} from './group-context.ts';
 import {rememberGroupMessage,groupMessageId} from './group-memory.ts';
@@ -361,17 +362,17 @@ export class WhatsApp {
     }
   }
   async receivePending() {
-    await processIncoming(message=>this.processGroupMessage(message),()=>!!this.socket&&this.enabled&&this.status==='connected');
+    await processIncoming(message=>this.prepareGroupMessage(message),()=>!!this.socket&&this.enabled&&this.status==='connected');
   }
-  private async processGroupMessage(message:WAMessage) {
+  private async prepareGroupMessage(message:WAMessage):Promise<PreparedIncoming> {
+    const skip:PreparedIncoming={author:message.key.participant??'unknown',snapshot:async()=>async commit=>{await commit();}};
     const sock=this.socket;if(!sock)throw Error('WhatsApp desligado.');
     const group=message.key.remoteJid!,id=message.key.id!;
     const text=message.message?.conversation??message.message?.extendedTextMessage?.text??'';
     if(!message.key.fromMe&&/^\/escada(?:\s|$)/i.test(text)){
-      await this.onCommand(group,message.key.participant??group,message.key.participantAlt??null);
-      return;
+      return {...skip,snapshot:async()=>async commit=>{await commit();await this.onCommand(group,message.key.participant??group,message.key.participantAlt??null);}};
     }
-    if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return;
+    if((await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==group)return skip;
     const diagnostic={event:groupMessageId(group,id),waitMs:Date.now()-Number(message.messageTimestamp)*1000};
     if(!await botEnabled())throw Error('IA pausada.');
     let phone=phoneFromJid(message.key.participantAlt)??phoneFromJid(message.key.participant);
@@ -397,19 +398,27 @@ export class WhatsApp {
       displayName:message.pushName??undefined,source:message.key.fromMe?'connected_account':'member',at,text,
       replyToId:quoted?groupMessageId(group,quoted):undefined,
       quoted:quoted&&quotedText?{id:groupMessageId(group,quoted),authorId:quote?.participant?digest(group+':'+(phoneFromJid(quote.participant)??quote.participant)):undefined,text:quotedText}:undefined};
-    const fresh=await rememberGroupMessage(group,turn);
-    const inbox=await db.groupInbox.findUnique({where:{id:turn.id}});
-    const context=inbox?.encryptedContext?JSON.parse(decrypt(inbox.encryptedContext,config.MESSAGE_KEY)):fresh;
-    if(inbox&&!inbox.encryptedContext)await db.groupInbox.update({where:{id:turn.id},data:{encryptedContext:encrypt(JSON.stringify(context),config.MESSAGE_KEY)}});
-    // Human conversations and our own messages provide context, never authority to act.
-    if(message.key.fromMe)return;
-    if(text.length>1500||!phone||!player?.verified||player.status!=='Ativo'){
-      console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:text.length>1500?'texto_longo':!phone?'numero_nao_resolvido':!player?'jogador_nao_encontrado':!player.verified?'numero_por_validar':'jogador_nao_ativo'}));return;
-    }
-    console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'analise_iniciada'}));
-    if(await handleJourneyConversation(group,phone,text,id,quoted,context))return;
-    if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
-    await handleAI(group,phone,text,id,context);
+    return {author:authorId,snapshot:async()=>{
+      const fresh=await rememberGroupMessage(group,turn);
+      const inbox=await db.groupInbox.findUnique({where:{id:turn.id}});
+      const context=inbox?.encryptedContext?JSON.parse(decrypt(inbox.encryptedContext,config.MESSAGE_KEY)):fresh;
+      if(inbox&&!inbox.encryptedContext)await db.groupInbox.update({where:{id:turn.id},data:{encryptedContext:encrypt(JSON.stringify(context),config.MESSAGE_KEY)}});
+      return async (commit:IncomingCommit)=>{
+        // Human conversations and our own messages provide context, never authority to act.
+        if(message.key.fromMe)return;
+        if(text.length>1500||!phone||!player?.verified||player.status!=='Ativo'){
+          console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:text.length>1500?'texto_longo':!phone?'numero_nao_resolvido':!player?'jogador_nao_encontrado':!player.verified?'numero_por_validar':'jogador_nao_ativo'}));return;
+        }
+        console.info('WhatsApp receção:',JSON.stringify({...diagnostic,reason:'analise_iniciada'}));
+        if(await handleJourneyConversation(group,phone,text,id,quoted,context,commit)){
+          void this.deliver().catch(()=>{});
+          return;
+        }
+        await commit();
+        if(participationIntent(text)&&await handleParticipation(group,phone,text,id,quoted))return;
+        await handleAI(group,phone,text,id,context);
+      };
+    }};
   }
   private async openWeb(){
     if(!this.enabled)return;
@@ -618,6 +627,7 @@ export class WhatsApp {
           where: { id: row.id },
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
+        if(row.kind==='journey_reply')console.info('WhatsApp confirmação enviada:',JSON.stringify({outboxId:row.id,queueMs:Date.now()-row.createdAt.getTime()}));
         if(row.recipient.endsWith('@g.us')){
           await rememberGroupMessage(row.recipient,{id:groupMessageId(row.recipient,result.key.id),authorId:'platform',authorName:'Ultimate Challenge',source:'platform',interaction:'interaction' in content?content.interaction:undefined,audienceIds:('mentions' in content?content.mentions??[]:[]).map(jid=>digest(row.recipient+':'+(phoneFromJid(jid)??jid))),at:Date.now(),text:content.text})
             .catch(()=>console.error('Não foi possível guardar a mensagem enviada no contexto do grupo.'));

@@ -9,7 +9,13 @@ export async function claimDelivery(now=new Date()){
   const state=await tx.setting.findUnique({where:{key}});
   const inFlight=await tx.outbox.count({where:{kind:{in:['invitation','invitation_reminder']},status:'sending'}});
   const paused=!!inFlight||!!state&&Number(state.value)>now.getTime();
-  const row=await tx.outbox.findFirst({where:{status:'pending',expiresAt:{gt:now},nextAttemptAt:{lte:now},...(paused?{kind:{notIn:['invitation','invitation_reminder']}}:{})},orderBy:[{createdAt:'asc'},{id:'asc'}]});
+  const excluded=paused?['invitation','invitation_reminder']:[];
+  const query=()=>tx.outbox.findFirst({where:{status:'pending',expiresAt:{gt:now},nextAttemptAt:{lte:now},...(excluded.length?{kind:{notIn:excluded}}:{})},orderBy:[{createdAt:'asc'},{id:'asc'}]});
+  let row=await query();
+  if(row?.kind==='journey_roster'&&await tx.groupInbox.count({where:{group:row.recipient,status:'pending'}})){
+    excluded.push('journey_roster');
+    row=await query();
+  }
   if(!row)return null;
   const claim=await tx.outbox.updateMany({where:{id:row.id,status:'pending'},data:{status:'sending',attempts:{increment:1}}});
   if(!claim.count)return null;

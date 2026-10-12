@@ -4,7 +4,7 @@ import {db} from './db.ts';
 import {config} from './config.ts';
 import {encrypt,decrypt} from './security.ts';
 import {groupMessageId} from './group-memory.ts';
-import {drainIncoming} from './incoming-queue.ts';
+import {drainIncomingParallel,type PreparedIncoming} from './incoming-queue.ts';
 
 export async function saveIncoming(message:WAMessage) {
   const group=message.key.remoteJid, id=message.key.id;
@@ -24,7 +24,7 @@ export async function saveIncoming(message:WAMessage) {
 }
 
 let running=false;
-export async function processIncoming(process:(message:WAMessage)=>Promise<void>,active:()=>boolean) {
+export async function processIncoming(prepare:(message:WAMessage)=>Promise<PreparedIncoming>,active:()=>boolean) {
   if(running||!active())return;
   running=true;
   const lease=new Client({connectionString:config.DATABASE_URL,connectionTimeoutMillis:10000});
@@ -45,7 +45,9 @@ export async function processIncoming(process:(message:WAMessage)=>Promise<void>
         if(await db.setting.findFirst({where:{key:{startsWith:'zapi-inbox:'+instance+':'}}}))return;
       }
     }
-    await drainIncoming({
+    const started=Date.now();
+    const completed=await drainIncomingParallel({
+      pending:limit=>db.groupInbox.findMany({where:{group,status:'pending'},orderBy:[{messageAt:'asc'},{sequence:'asc'}],take:limit}),
       first:()=>db.groupInbox.findFirst({where:{group,status:'pending'},orderBy:[{messageAt:'asc'},{sequence:'asc'}]}),
       attempt:async job=>{await db.groupInbox.update({where:{id:job.id},data:{attempts:{increment:1}}});},
       complete:async job=>{await db.groupInbox.update({where:{id:job.id},data:{status:'done',completedAt:new Date(),lastError:null}});},
@@ -56,7 +58,8 @@ export async function processIncoming(process:(message:WAMessage)=>Promise<void>
       }
     },async job=>{
       if(!alive||!active())throw Error('Ligação interrompida.');
-      await process(JSON.parse(decrypt(job.encryptedPayload,config.MESSAGE_KEY)) as WAMessage);
+      return prepare(JSON.parse(decrypt(job.encryptedPayload,config.MESSAGE_KEY)) as WAMessage);
     },{active:()=>alive&&active()});
+    if(completed)console.info('WhatsApp fila processada:',JSON.stringify({mode:'parallel-4',completed,elapsedMs:Date.now()-started}));
   } finally {await lease.end().catch(()=>{});running=false;}
 }

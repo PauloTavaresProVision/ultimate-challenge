@@ -1,5 +1,6 @@
 import {normalizeCalendar} from '../../lib/weekly-calendar.ts';
 import {journeyRoster} from '../../lib/journey-roster.ts';
+import {queueJourneyRoster} from './journey-roster-queue.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
 import type {JourneyDecision} from './journey-ai.ts';
 import {defaultJourneyMessage,journeyAnnouncement} from '../../lib/journey-message.ts';
@@ -165,7 +166,7 @@ export async function handleJourney(
       );
       if(rosterChanged){
         const roster=await tx.player.findMany({where:{id:{in:[...j.confirmed,...j.waiting]}},select:{id:true,name:true}});
-        await notice(tx,j,journeyRoster(j,roster));
+        await queueJourneyRoster(tx,j,journeyRoster(j,roster));
       }
       await tx.setting.create({ data: { key: event, value: 'done' } });
       return true;

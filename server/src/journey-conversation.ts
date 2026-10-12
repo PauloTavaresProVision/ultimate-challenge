@@ -1,3 +1,4 @@
+import type {IncomingCommit} from './incoming-queue.ts';
 import type {GroupContext} from './group-context.ts';
 import {botEnabled} from './ai-bot.ts';
 import {resolveJourneyReference} from './journey-reference.ts';
@@ -15,6 +16,7 @@ export async function handleJourneyConversation(
   eventId: string,
   quotedId?: string,
   groupConversation?: GroupContext,
+  commit:IncomingCommit=async()=>{},
 ) {
   const serialKey = digest(group + phone);
   const work = (serial.get(serialKey) ?? Promise.resolve())
@@ -102,7 +104,8 @@ export async function handleJourneyConversation(
         );
         if(inbox&&!cached)await db.groupInbox.update({where:{id:inboxId},data:{encryptedDecision:encrypt(JSON.stringify(decision),config.MESSAGE_KEY)}});
         console.info('WhatsApp participação:',JSON.stringify({version:PARTICIPATION_VERSION,event:digest(group+':'+eventId),action:decision.action,targetResolved:!!decision.journeyId,openJourneys:journeys.filter(j=>j.status==='open').length}));
-        if (!await botEnabled()) return true;
+        await commit();
+        if (!await botEnabled()) throw Error('IA pausada.');
         if (decision.action === 'silent') {
           await db.setting.deleteMany({where:{key:memoryKey}});
           return true;

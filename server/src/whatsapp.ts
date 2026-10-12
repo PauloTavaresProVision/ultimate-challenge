@@ -606,7 +606,7 @@ export class WhatsApp {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }
         attempted = true;
-        const result = await socket.sendMessage(recipient, content);
+        const result = await socket.sendMessage(recipient, {text:content.text,...('mentions' in content&&content.mentions?{mentions:content.mentions}:{})});
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         if (!result?.key.id) throw new Error('Envio sem identificador WhatsApp.');
         await db.setting.upsert({
@@ -619,7 +619,7 @@ export class WhatsApp {
           data: { status: 'sent', sentAt: new Date(), encryptedBody: '' },
         });
         if(row.recipient.endsWith('@g.us')){
-          await rememberGroupMessage(row.recipient,{id:groupMessageId(row.recipient,result.key.id),authorId:'platform',authorName:'Ultimate Challenge',source:'platform',audienceIds:('mentions' in content?content.mentions??[]:[]).map(jid=>digest(row.recipient+':'+(phoneFromJid(jid)??jid))),at:Date.now(),text:content.text})
+          await rememberGroupMessage(row.recipient,{id:groupMessageId(row.recipient,result.key.id),authorId:'platform',authorName:'Ultimate Challenge',source:'platform',interaction:'interaction' in content?content.interaction:undefined,audienceIds:('mentions' in content?content.mentions??[]:[]).map(jid=>digest(row.recipient+':'+(phoneFromJid(jid)??jid))),at:Date.now(),text:content.text})
             .catch(()=>console.error('Não foi possível guardar a mensagem enviada no contexto do grupo.'));
         }
 

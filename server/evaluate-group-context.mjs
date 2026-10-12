@@ -9,8 +9,10 @@ const message=(id,author,text,extra={})=>({id,authorId:author,authorName:author,
 const announcement=message('0','Ultimate Challenge','M1+ · 23/09/2026 às 20:00. Inscrições abertas. Responde para participar.',{source:'platform'});
 const absent=message('1','Alexandre','Boa noite Nelinho, não vou conseguir jogar entre pfvr 1 suplente');
 const question=message('2','Pedro','João, vens jogar amanhã?');
-const platformQuestion=message('2','Ultimate Challenge','Pretendes entrar em M1+ no dia 23 ou no dia 30?',{source:'platform',audienceIds:['João']});
+const platformQuestion=message('2','Ultimate Challenge','Pretendes entrar em M1+ no dia 23 ou no dia 30?',{source:'platform',interaction:'clarification',audienceIds:['João']});
 const cases=[
+ {label:'Adesão a boleia entre pessoas',history:[message('1','Pedro','João, vens de carro comigo?')],current:message('3','João','Conta comigo'),expected:'silent'},
+ {label:'Pedido novo muda assunto social',history:[message('1','Pedro','João, vens jantar?')],current:message('3','João','Quero inscrever-me no padel de dia 23'),expected:'join',journeyId:'first'},
  {label:'Out autónomo com inscrição própria',history:[],current:message('3','Diogo','out'),enrolled:true,expected:'leave',journeyId:'first'},
  {label:'Desistência informal com inscrição própria',history:[],current:message('3','Diogo','estou fora desta vez'),enrolled:true,expected:'leave',journeyId:'first'},
  {label:'Out não cancela terceiros',history:[],current:message('3','Diogo','O João está out'),enrolled:true,expected:'silent'},
@@ -24,8 +26,8 @@ const cases=[
  {label:'Estou dentro sem histórico com uma única jornada aberta',history:[],current:message('3','João','Estou dentro'),expected:'join',journeyId:'first',single:true},
  {label:'In sem citar anúncio',history:[announcement],current:message('3','João','In'),expected:'join',journeyId:'first'},
  {label:'Estou dentro sem citar anúncio',history:[announcement],current:message('3','João','Estou dentro'),expected:'join',journeyId:'first'},
- {label:'In sem anúncio no histórico e duas datas',history:[],current:message('3','João','In'),expected:'join'},
- {label:'Estou dentro após conversa de outros',history:[absent,message('2','Nelinho','Amanhã faço alteração')],current:message('3','João','Estou dentro'),expected:'join'},
+ {label:'In sem anúncio no histórico e duas datas',history:[],current:message('3','João','In'),expected:'join',nullJourney:true},
+ {label:'Estou dentro após conversa de outros',history:[absent,message('2','Nelinho','Amanhã faço alteração')],current:message('3','João','Estou dentro'),expected:'join',nullJourney:true},
  {label:'Adesão após confirmação de outro jogador',history:[announcement,message('2','Ultimate Challenge','Pedro, estás confirmado!',{source:'platform',audienceIds:['Pedro']})],current:message('3','João','In'),expected:'join',journeyId:'first'},
  {label:'Adesão informal sem vocabulário fixo',history:[announcement],current:message('3','João','Guardem-me um lugar, também vou jogar!'),expected:'join',journeyId:'first'},
  {label:'Estou dentro dirigido a pessoa',history:[question],current:message('3','João','Estou dentro',{replyToId:'2'}),expected:'silent'},
@@ -58,9 +60,10 @@ try{
  for(const c of cases){
   const trace=[];
   const decision=await interpretParticipation(key,c.current.text,{quotedJourney:c.verifiedQuote??null,authorName:c.current.authorName,authorId:c.current.authorId,division:'M1+',today:new Date(base).toISOString(),groupConversation:groupContext(c.history,c.current),journeys:[{id:'first',date:'2026-09-23',time:'20:00',division:'M1+',status:'open',enrolled:!!c.enrolled},{id:'second',date:'2026-09-30',time:'20:00',division:'M1+',status:'open',enrolled:!!c.bothEnrolled}].slice(0,c.single?1:2)},c.single?['first']:['first','second'],fetch,value=>trace.push(value));
-  const ok=(!c.nullJourney||decision.journeyId===null)&&decision.action===c.expected&&(!c.journeyId||decision.journeyId===c.journeyId);
+  const expectedJourney=c.journeyId??null;
+  const ok=decision.action===c.expected&&decision.journeyId===expectedJourney;
   if(!ok){failed++;console.log('DIAGNÓSTICO:',JSON.stringify(trace));}
-  console.log(`${ok?'OK':'FALHOU'} | ${c.label} | esperado: ${c.expected}${c.journeyId?'/'+c.journeyId:''} | obtido: ${decision.action}/${decision.journeyId??'-'}`);
+  console.log(`${ok?'OK':'FALHOU'} | ${c.label} | esperado: ${c.expected}/${expectedJourney??'-'} | obtido: ${decision.action}/${decision.journeyId??'-'}`);
  }
  console.log(`${cases.length-failed}/${cases.length} conversas corretas. Nenhuma mensagem enviada e nenhuma inscrição alterada.`);
  if(failed)process.exitCode=1;

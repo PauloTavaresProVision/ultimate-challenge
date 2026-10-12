@@ -2,7 +2,7 @@ import {z} from 'zod';
 export const GROUP_CONTEXT_AGE=12*60*60*1000;
 export const GROUP_CONTEXT_LIMIT=40;
 const quoteSchema=z.object({id:z.string(),authorId:z.string().optional(),authorName:z.string().optional(),text:z.string()});
-export const groupTurnSchema=z.object({id:z.string(),authorId:z.string(),authorName:z.string(),displayName:z.string().optional(),source:z.enum(['member','connected_account','platform']),audienceIds:z.array(z.string()).optional(),at:z.number(),text:z.string(),replyToId:z.string().optional(),quoted:quoteSchema.optional()});
+export const groupTurnSchema=z.object({id:z.string(),authorId:z.string(),authorName:z.string(),displayName:z.string().optional(),source:z.enum(['member','connected_account','platform']),interaction:z.enum(['clarification','notification']).optional(),audienceIds:z.array(z.string()).optional(),at:z.number(),text:z.string(),replyToId:z.string().optional(),quoted:quoteSchema.optional()});
 export type GroupTurn=z.infer<typeof groupTurnSchema>;
 export type GroupContext={messages:GroupTurn[];currentMessage:GroupTurn;repliedMessage:GroupTurn|GroupTurn['quoted']|null};
 export function appendGroupTurn(history:GroupTurn[],turn:GroupTurn,now=Date.now()){

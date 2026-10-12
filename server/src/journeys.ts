@@ -35,6 +35,7 @@ async function notice(
   j: Journey,
   text: string,
   phone?: string,
+  interaction: 'clarification'|'notification' = 'notification',
 ) {
   const message = await tx.outbox.create({
     data: {
@@ -43,7 +44,7 @@ async function notice(
       encryptedBody: encrypt(
         phone
           ? JSON.stringify({
-              format: 'mentioned-reply-v1',
+              format: 'mentioned-reply-v1',interaction,
               ...mentionedReply(text, phone),
             })
           : text,
@@ -115,6 +116,7 @@ export async function handleJourney(
       const j = choices[0];
       let reply = '';
       let rosterChanged = false;
+      const clarification=!!player&&player.verified&&player.status==='Ativo'&&(action==='clarify'||choices.length!==1||!!(decision&&!decision.journeyId&&!quotedId));
       if (!player || !player.verified || player.status !== 'Ativo')
         reply =
           'A participação exige uma inscrição aprovada na plataforma. Contacta a organização.';
@@ -159,6 +161,7 @@ export async function handleJourney(
         j,
         choices.length===1?`${j.division} · ${j.date.split('-').reverse().join('/')} ${j.time}\n${reply}`:reply,
         phone,
+        clarification?'clarification':'notification',
       );
       if(rosterChanged){
         const roster=await tx.player.findMany({where:{id:{in:[...j.confirmed,...j.waiting]}},select:{id:true,name:true}});

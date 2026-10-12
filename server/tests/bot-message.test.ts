@@ -11,3 +11,7 @@ test('Already queued plain text replies remain readable',()=>{
  assert.deepEqual(decodeBotMessage('Ainda não há jogos.'),{text:'Ainda não há jogos.'});
  assert.throws(()=>mentionedReply('Olá','123@lid'));
 });
+test('Private clarification metadata survives decoding without changing visible message',()=>{
+ const reply=mentionedReply('Qual o dia?','+244900000001');
+ assert.deepEqual(decodeBotMessage(JSON.stringify({format:'mentioned-reply-v1',...reply,interaction:'clarification'})),{...reply,interaction:'clarification'});
+});

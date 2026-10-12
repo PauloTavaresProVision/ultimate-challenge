@@ -7,6 +7,19 @@ const turn=(id:string,authorId:string,text:string,extra:Partial<GroupTurn>={}):G
 const envelope=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
 const route=(extra:Partial<GroupRouting>={}):GroupRouting=>({reason:'Pedido pessoal à plataforma.',addressee:'platform',purpose:'participation',dependsOnMessageId:null,platformVocative:null,...extra});
 
+test('Private clarification cannot be claimed by another author even if AI omits dependency',()=>{
+ const parent=turn('a','platform','Dia 23 ou 30?',{source:'platform',interaction:'clarification',audienceIds:['João']});
+ for(const author of ['Miguel','João']){
+  const current=turn('b',author,'A primeira opção',{replyToId:'a'});
+  assert.equal(permittedIntervention(route(),current.text,{quotedJourney:'one',groupConversation:groupContext([parent],current)}),author==='João'?'participation':'silent');
+ }
+});
+test('Reply to a public confirmation remains available for a new personal signup',()=>{
+ const parent=turn('a','platform','Pedro, estás confirmado!',{source:'platform',interaction:'notification',audienceIds:['Pedro']});
+ const current=turn('b','João','In',{replyToId:'a'});
+ assert.equal(permittedIntervention(route(),current.text,{quotedJourney:'one',groupConversation:groupContext([parent],current)}),'participation');
+});
+
 test('Withdrawal router receives own enrolment even when registrations are closed, without target IDs',async()=>{
  for(const enrolled of [true,false])await routeGroupIntervention('fake','out',{journeys:[{id:'private-id',status:'closed',enrolled}]},async(_url,options)=>{
   const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input);

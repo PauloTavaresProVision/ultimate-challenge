@@ -572,7 +572,7 @@ export class WhatsApp {
       };
       try {
         if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
-        if(row.kind.startsWith('journey_')&&(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient){await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
+        if((row.kind.startsWith('journey_')||row.kind==='group_manual')&&(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient){await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }
@@ -606,7 +606,7 @@ export class WhatsApp {
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const recipient = await resolveRecipient(row.recipient, pn => socket.signalRepository.lidMapping.getLIDForPN(pn));
         const body = decrypt(row.encryptedBody, config.MESSAGE_KEY);
-        const content = ['ai','journey_reply','round'].includes(row.kind) ? decodeBotMessage(body) : {text:body};
+        const content = ['ai','journey_reply','round','group_manual'].includes(row.kind) ? decodeBotMessage(body) : {text:body};
         await ready();
         if(row.kind==='invitation_reminder'&&!await reminderStillEligible(row.recipient)){
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
@@ -644,6 +644,10 @@ export class WhatsApp {
         if(['invitation','invitation_reminder'].includes(row.kind)) await finishInvitation();
         const code = (error as { output?: { statusCode?: number } })?.output?.statusCode;
         console.error('Falha no envio WhatsApp:', row.id, row.kind, typeof code === 'number' ? code : 'sem código');
+        if(row.kind==='group_manual'){
+          const reason=typeof code==='number'?'O WhatsApp devolveu o código '+code+'.':'Não foi possível confirmar o envio junto do WhatsApp. Verifica no grupo antes de repetir.';
+          await db.setting.upsert({where:{key:'group-manual-error:'+row.id},create:{key:'group-manual-error:'+row.id,value:reason},update:{value:reason}});
+        }
         await db.outbox.update({
           where: { id: row.id },
           data: recoverGroupEntry(row.kind,stage,row.attempts,error)

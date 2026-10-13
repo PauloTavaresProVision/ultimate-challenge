@@ -1,3 +1,4 @@
+import GroupComposer from './group-composer';
 import AIResponseControl from './ai-response-control';
 import InviteDialog from './invite-dialog';
 import ZApiSettings from './zapi-settings';
@@ -34,7 +35,7 @@ type Group = { id: string; name: string };
 type Connection = { incoming?: {pending:number;recovering:number}; warning?: string | null; automaticPaused?: boolean; engine?: "baileys" | "webjs" | "zapi"; lastError?: string | null; status: string; qr: string | null; groupId: string | null; groupName?: string | null; account?: { name: string | null; phone: string | null } | null; connectedAt?: string | null };
 export default function WhatsAppLive() {
   const [tab,setTab]=useState('connection');
-  const tabs=[['connection','Ligação e grupo'],['automation','Envios e IA'],['invites','Convites'],['messages','Mensagens']];
+  const tabs=[['connection','Ligação e grupo'],['automation','Envios e IA'],['invites','Convites'],['compose','Enviar ao grupo'],['messages','Mensagens']];
   const [state, setState] = useState<Connection>({ status: 'loading', qr: null, groupId: null });
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Group | null>(null);
@@ -176,6 +177,9 @@ export default function WhatsAppLive() {
       {note && <div className="wa-invite-link"><a href={note}>{note}</a><Button variant="outline" onClick={() => navigator.clipboard.writeText(note).then(() => setCopied(true)).catch(() => setError('Seleciona e copia o link manualmente.'))}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copiado' : 'Copiar link'}</Button></div>}
     </section>
     <InviteHistory connected={connected}/>
+    </div>
+    <div id="wa-section-compose" className="wa-tab-panel" hidden={tab!=='compose'}>
+      {tab==='compose'&&(state.groupId?<GroupComposer key={state.groupId} group={state.groupId} groupName={groupName??'Grupo associado'} connected={connected} paused={!!state.automaticPaused}/>:<section className="wa-card"><p>Associa primeiro o grupo em “Ligação e grupo”.</p></section>)}
     </div>
     <div id="wa-section-messages" className="wa-tab-panel" hidden={tab!=='messages'}>
     <MessageCenter />

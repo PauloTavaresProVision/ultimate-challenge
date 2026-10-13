@@ -1,3 +1,4 @@
+import {installGroupCompose} from './group-compose.ts';
 import {pruneGroupMemory} from './group-memory.ts';
 import {installWallboard} from './wallboard.ts';
 import {playerStandings} from '../../lib/player-standings.ts';
@@ -488,6 +489,7 @@ installOpenAI(app, auth, admin);
 installAI(app, auth, admin);
 installCalendar(app, auth, admin);
 installJourneys(app, auth, admin);
+installGroupCompose(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
   res.json({months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});

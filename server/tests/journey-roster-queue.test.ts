@@ -48,3 +48,15 @@ test('Pending group requests hold roster but never block individual confirmation
   assert.equal((await claimDelivery(new Date(now.getTime()+6000)))?.kind,'journey_roster');
  }finally{db.$transaction=original;await db.$disconnect();}
 });
+
+
+test('Manual messages are spaced by five seconds while other message types remain available',async()=>{
+ const f=fixture();const original=db.$transaction;db.$transaction=(async(fn:any)=>fn(f.tx)) as any;
+ try{
+  for(const kind of ['group_manual','group_manual','journey_reply'])await f.tx.outbox.create({data:{kind,recipient:group,nextAttemptAt:now,expiresAt:new Date('2026-10-20')}});
+  assert.equal((await claimDelivery(now))?.id,'0');
+  assert.equal((await claimDelivery(new Date(now.getTime()+1000)))?.id,'2');
+  assert.equal(await claimDelivery(new Date(now.getTime()+4999)),null);
+  assert.equal((await claimDelivery(new Date(now.getTime()+5000)))?.id,'1');
+ }finally{db.$transaction=original;await db.$disconnect();}
+});

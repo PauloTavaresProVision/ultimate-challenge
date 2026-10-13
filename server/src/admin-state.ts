@@ -1,3 +1,4 @@
+import {associateRoundMessage} from './round-messages.ts';
 import { roundAnnouncement } from './round-announcement.ts';
 import {forbiddenPartnership} from '../../lib/pairing-restrictions.ts';
 import { vacancies } from './substitutions.ts';
@@ -269,13 +270,17 @@ export function installAdminState(
       if (published.length) {
         const deliverySetting=await tx.setting.findUnique({where:{key:'message_delivery'}});
         const delivery:Delivery=deliverySetting?JSON.parse(deliverySetting.value):{mode:'immediate',hoursBefore:24};
-        const window=deliveryWindow(delivery,published);
+
         const group = await tx.setting.findUnique({
           where: { key: 'whatsapp_group' },
         });
         if (!group) bad('Associa primeiro o grupo Escada.');
-        const message = roundAnnouncement(published, data.players, data.courts, config.APP_ORIGIN);
-        await tx.outbox.create({
+        const sections=new Map<string,typeof published>();
+        for(const game of published){const key=`${game.round}:${game.division}:${game.date}`;sections.set(key,[...(sections.get(key)??[]),game]);}
+        for(const rows of sections.values()){
+        const window=deliveryWindow(delivery,rows);
+        const message = roundAnnouncement(rows, data.players, data.courts, config.APP_ORIGIN);
+        const queued=await tx.outbox.create({
           data: {
             recipient: group!.value,
             kind: 'round',
@@ -283,6 +288,8 @@ export function installAdminState(
             ...window,
           },
         });
+        await associateRoundMessage(tx,queued.id,{round:rows[0].round,division:rows[0].division,date:rows[0].date});
+        }
       }
       await tx.audit.create({
         data: {

@@ -572,7 +572,7 @@ export class WhatsApp {
       };
       try {
         if(row.kind === 'ai' && (!await botEnabled() || (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient)) {await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
-        if((row.kind.startsWith('journey_')||row.kind==='group_manual')&&(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient){await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
+        if((row.kind.startsWith('journey_')||row.kind==='group_manual'||row.kind==='round')&&(await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value!==row.recipient){await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;}
         if(row.kind === 'welcome' && (await db.setting.findUnique({where:{key:'whatsapp_group'}}))?.value !== row.recipient) {
           await db.outbox.update({where:{id:row.id},data:{status:'cancelled',encryptedBody:''}});return;
         }

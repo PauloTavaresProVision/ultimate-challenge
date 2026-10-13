@@ -208,7 +208,7 @@ export function installAdminState(
       for(const v of (await vacancies(tx)).filter(v=>v.status==='pending')) {
         for(const id of v.gameIds) {
           const old=oldGames.find(g=>g.id===id), next=data.games.find(g=>g.id===id);
-          if(!old||!next||JSON.stringify(old.a)!==JSON.stringify(next.a)||JSON.stringify(old.b)!==JSON.stringify(next.b)||next.winner||old.date!==next.date||old.round!==next.round||!next.published)bad('O jogo aguarda suplente. Resolve a substituição antes de alterar participantes ou resultados.');
+          if(!old||!next||JSON.stringify(old.a)!==JSON.stringify(next.a)||JSON.stringify(old.b)!==JSON.stringify(next.b)||next.winner||old.date!==next.date||old.round!==next.round||old.published!==next.published)bad('O jogo aguarda suplente. Resolve a substituição antes de alterar participantes ou resultados.');
         }
       }
       for (const g of data.games) {

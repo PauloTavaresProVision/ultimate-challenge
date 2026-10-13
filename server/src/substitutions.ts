@@ -1,3 +1,5 @@
+import {forbiddenPartnership} from '../../lib/pairing-restrictions.ts';
+import type {Journey} from '../../lib/journey.ts';
 import type { Prisma } from './generated/prisma/client.ts';
 import type {Express,RequestHandler} from 'express';
 import {z} from 'zod';
@@ -10,47 +12,64 @@ export const todayLuanda=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/L
 export async function vacancies(tx:Prisma.TransactionClient=db){return (await tx.setting.findMany({where:{key:{startsWith:'absence:'}}})).map(r=>JSON.parse(r.value) as Vacancy);}
 async function notice(tx:Prisma.TransactionClient,text:string){const group=await tx.setting.findUnique({where:{key:'whatsapp_group'}});if(group)await tx.outbox.create({data:{recipient:group.value,kind:'substitution',encryptedBody:encrypt(text,config.MESSAGE_KEY),expiresAt:new Date(Date.now()+86400000)}});}
 async function lock(tx:Prisma.TransactionClient){await tx.revision.update({where:{id:1},data:{value:{increment:1}}});}
-async function mark(tx:Prisma.TransactionClient,playerId:string,round:number,sourceId?:string){
- const existing=(await vacancies(tx)).find(v=>v.playerId===playerId&&v.round===round&&v.status!=='cancelled');if(existing)return existing;
+async function mark(tx:Prisma.TransactionClient,playerId:string,round:number,sourceId?:string,allowDraft=false,announce=true){
+ const existing=(await vacancies(tx)).find(v=>v.playerId===playerId&&v.round===round&&v.status==='pending');if(existing)return existing;
  const p=await tx.player.findUnique({where:{id:playerId}});if(!p||!p.verified||p.status!=='Ativo')fail('Jogador não elegível.');
- const games=await tx.game.findMany({where:{round,published:true,OR:[{a:{has:playerId}},{b:{has:playerId}}]}});
- if(games.length!==4||games.some(g=>g.winner||g.duration!==20||g.date!==games[0].date)||games.some(g=>g.date<todayLuanda()))fail('A ausência exige quatro jogos publicados ainda sem resultados. Contacta a organização.');
+ const games=await tx.game.findMany({where:{round,...(!allowDraft?{published:true}:{}),OR:[{a:{has:playerId}},{b:{has:playerId}}]}});
+ if(games.length!==4||games.some(g=>g.winner||g.duration!==20||g.date!==games[0].date||g.published!==games[0].published)||games.some(g=>g.date<todayLuanda()))fail('A saída exige quatro jogos de hoje ou futuros, ainda sem resultados.');
  if(await tx.setting.findUnique({where:{key:'competition:month:'+games[0].date.slice(0,7)}}))fail('O mês já está encerrado.');
  const pair=games[0].a.includes(playerId)?games[0].a:games[0].b;
  const v:Vacancy={id:crypto.randomUUID(),round,date:games[0].date,playerId,name:p!.name,division:games[0].division,side:pair.indexOf(playerId)===0?'Esquerda':'Direita',gameIds:games.map(g=>g.id),sourceId,candidates:[],status:'pending'};
  await tx.setting.create({data:{key:'absence:'+v.id,value:JSON.stringify(v)}});
  await tx.audit.create({data:{actor:playerId,action:`Ausência registada: ${p!.name}, ronda ${round}. Aguarda suplente.`}});
- await notice(tx,`${p!.name} não participa na ronda ${round} (${v.date}). Os quatro jogos aguardam suplente. Podes responder “posso substituir” a esta ausência; a organização tem de aprovar.`);
+ if(announce&&games[0].published)await notice(tx,`${p!.name} não participa na ronda ${round} (${v.date}). Os quatro jogos aguardam suplente. Podes responder “posso substituir” a esta ausência; a organização tem de aprovar.`);
  return v;
 }
-async function eligible(tx:Prisma.TransactionClient,v:Vacancy,id:string){
+async function eligible(tx:Prisma.TransactionClient,v:Vacancy,id:string,allowDifferentSide=false){
  const p=await tx.player.findUnique({where:{id}});
- if(!p||!p.verified||p.status!=='Ativo'||p.side!==v.side||p.division!==v.division||id===v.playerId)fail('O suplente deve estar aprovado e ter o mesmo lado e divisão.');
+ if(!p||!p.verified||p.status!=='Ativo'||(!allowDifferentSide&&p.side!==v.side)||p.division!==v.division||id===v.playerId)fail('O suplente deve estar aprovado e ter o mesmo lado e divisão.');
  if(await tx.game.count({where:{OR:[{round:v.round},{date:v.date}],AND:[{OR:[{a:{has:id}},{b:{has:id}}]}]}}))fail('Este jogador já tem jogos nessa ronda ou nesse dia.');
  return p!;
 }
-export async function approveVacancy(id:string,substituteId:string){return db.$transaction(async tx=>{
- await lock(tx);const v=(await vacancies(tx)).find(v=>v.id===id);if(!v||v.status!=='pending')fail('A vaga já não está pendente.');
- const vacancy=v!;const p=await eligible(tx,vacancy,substituteId);
+async function approveInTransaction(tx:Prisma.TransactionClient,id:string,substituteId:string){
+ const v=(await vacancies(tx)).find(v=>v.id===id);if(!v||v.status!=='pending')fail('A vaga já não está pendente.');
+ const vacancy=v!;
  const games=await tx.game.findMany({where:{id:{in:vacancy.gameIds}}});
- if(games.length!==4||games.some(g=>g.winner||!g.published||g.date!==vacancy.date||g.round!==vacancy.round||![...g.a,...g.b].includes(vacancy.playerId))||vacancy.date<todayLuanda())fail('Os jogos já não permitem esta substituição.');
+ if(games.length!==4||games.some(g=>g.winner||g.published!==games[0].published||g.date!==vacancy.date||g.round!==vacancy.round||![...g.a,...g.b].includes(vacancy.playerId))||vacancy.date<todayLuanda())fail('Os jogos já não permitem esta substituição.');
  if(await tx.setting.findUnique({where:{key:'competition:month:'+vacancy.date.slice(0,7)}}))fail('O mês já está encerrado.');
+ const p=await eligible(tx,vacancy,substituteId,!games[0].published);
  const previous=await tx.game.findMany({where:{round:vacancy.round-1}});
  for(const g of games){
   const pair=g.a.includes(vacancy.playerId)?g.a:g.b;const partner=pair.find(x=>x!==vacancy.playerId)!;
+  const partnerPlayer=await tx.player.findUnique({where:{id:partner}});
+  if(partnerPlayer&&forbiddenPartnership({...partnerPlayer,division:vacancy.division as Journey['division']},{...p,division:vacancy.division as Journey['division']}))fail('Estes jogadores não podem formar dupla.');
   if(previous.some(old=>[old.a,old.b].some(team=>team.includes(partner)&&team.includes(substituteId))))fail('Este suplente repetiria o parceiro da semana anterior.');
   await tx.game.update({where:{id:g.id},data:{a:g.a.map(x=>x===vacancy.playerId?substituteId:x),b:g.b.map(x=>x===vacancy.playerId?substituteId:x)}});
  }
+ const journeys=await tx.setting.findMany({where:{key:{startsWith:'journey:'}}});
+ for(const row of journeys){const j=JSON.parse(row.value) as Journey;
+  if(j.division!==vacancy.division||j.date!==vacancy.date||!j.confirmed.includes(vacancy.playerId))continue;
+  if(j.confirmed.includes(substituteId))fail('O suplente já consta dos confirmados. Atualiza a jornada.');
+  j.confirmed=j.confirmed.map(x=>x===vacancy.playerId?substituteId:x);
+  j.waiting=j.waiting.filter(x=>x!==substituteId&&x!==vacancy.playerId);
+  await tx.setting.update({where:{key:row.key},data:{value:JSON.stringify(j)}});
+ }
  vacancy.status='approved';vacancy.substituteId=substituteId;await tx.setting.update({where:{key:'absence:'+id},data:{value:JSON.stringify(vacancy)}});
  await tx.audit.create({data:{actor:'admin',action:`${p.name} substitui ${vacancy.name} nos quatro jogos da ronda ${vacancy.round}.`}});
- await notice(tx,`Substituição aprovada: ${p.name} substitui ${vacancy.name} nos quatro jogos da ronda ${vacancy.round}, divisão ${vacancy.division}, lado ${vacancy.side.toLowerCase()}. Consulta os jogos atualizados: ${config.APP_ORIGIN}/jogos`);
+ if(games[0].published)await notice(tx,`Substituição aprovada: ${p.name} substitui ${vacancy.name} nos quatro jogos da ronda ${vacancy.round}, divisão ${vacancy.division}, lado ${vacancy.side.toLowerCase()}. Consulta os jogos atualizados: ${config.APP_ORIGIN}/jogos`);
  return {ok:true};
-});}
+}
+async function adminLock(tx:Prisma.TransactionClient){await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('journeys'))`;await lock(tx);}
+export async function approveVacancy(id:string,substituteId:string){return db.$transaction(async tx=>{await adminLock(tx);return approveInTransaction(tx,id,substituteId);});}
 export function installSubstitutions(app:Express,auth:RequestHandler,admin:RequestHandler){
- app.get('/api/admin/substitutions',auth,admin,async(_req,res)=>{res.json({vacancies:await vacancies(),players:await db.player.findMany({where:{status:'Ativo',verified:true},select:{id:true,name:true,side:true,division:true}}),games:await db.game.findMany({where:{published:true,winner:null,date:{gte:todayLuanda()}},select:{round:true,date:true,a:true,b:true}})});});
- app.post('/api/admin/substitutions',auth,admin,async(req,res)=>{const input=z.object({playerId:z.string(),round:z.number().int().positive()}).parse(req.body);res.json(await db.$transaction(async tx=>{await lock(tx);return mark(tx,input.playerId,input.round);}));});
+ app.get('/api/admin/substitutions',auth,admin,async(_req,res)=>{res.json({vacancies:await vacancies(),players:await db.player.findMany({where:{status:'Ativo',verified:true},select:{id:true,name:true,side:true,division:true}}),games:await db.game.findMany({where:{date:{gte:todayLuanda()}},select:{round:true,date:true,division:true,published:true,winner:true,a:true,b:true}})});});
+ app.post('/api/admin/substitutions',auth,admin,async(req,res)=>{const input=z.object({playerId:z.string(),round:z.number().int().positive()}).parse(req.body);res.json(await db.$transaction(async tx=>{await adminLock(tx);return mark(tx,input.playerId,input.round,undefined,true);}));});
+ app.post('/api/admin/substitutions/replace',auth,admin,async(req,res)=>{
+  const input=z.object({playerId:z.string(),substituteId:z.string(),round:z.number().int().positive()}).parse(req.body);
+  res.json(await db.$transaction(async tx=>{await adminLock(tx);const v=await mark(tx,input.playerId,input.round,undefined,true,false);return approveInTransaction(tx,v.id,input.substituteId);}));
+ });
  app.post('/api/admin/substitutions/:id/approve',auth,admin,async(req,res)=>{const {playerId}=z.object({playerId:z.string()}).parse(req.body);res.json(await approveVacancy(String(req.params.id),playerId));});
- app.post('/api/admin/substitutions/:id/cancel',auth,admin,async(req,res)=>{res.json(await db.$transaction(async tx=>{await lock(tx);const v=(await vacancies(tx)).find(v=>v.id===req.params.id);if(!v||v.status!=='pending')fail('Vaga indisponível.');v!.status='cancelled';await tx.setting.update({where:{key:'absence:'+v!.id},data:{value:JSON.stringify(v)}});await notice(tx,`A organização cancelou a ausência de ${v!.name} na ronda ${v!.round}.`);return {ok:true};}));});
+ app.post('/api/admin/substitutions/:id/cancel',auth,admin,async(req,res)=>{res.json(await db.$transaction(async tx=>{await lock(tx);const v=(await vacancies(tx)).find(v=>v.id===req.params.id);if(!v||v.status!=='pending')fail('Vaga indisponível.');v!.status='cancelled';await tx.setting.update({where:{key:'absence:'+v!.id},data:{value:JSON.stringify(v)}});if(await tx.game.count({where:{id:{in:v!.gameIds},published:true}}))await notice(tx,`A organização cancelou a ausência de ${v!.name} na ronda ${v!.round}.`);return {ok:true};}));});
 }
 export function participationIntent(text:string){
  const s=text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();

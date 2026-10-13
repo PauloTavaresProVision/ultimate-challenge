@@ -264,6 +264,32 @@ export function installJourneys(
       }),
     );
   });
+  app.post('/api/admin/journeys/:id/players',auth,admin,async(req,res)=>{
+    const input=z.object({playerId:z.string().min(1),action:z.enum(['join','leave','promote'])}).parse(req.body);
+    res.json(await db.$transaction(async tx=>{
+      await lock(tx);
+      const j=(await listJourneys(tx)).find(j=>j.id===req.params.id);
+      const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
+      if(!j||j.status==='drawn'||j.date<today)fail('Esta jornada já não permite alterar inscrições. Usa os jogadores da ronda para substituir.');
+      const journey=j!;
+      const player=await tx.player.findUnique({where:{id:input.playerId}});
+      if(!player)fail('Jogador não encontrado.');
+      if(input.action!=='leave'&&(!player!.verified||player!.status!=='Ativo'||player!.division!==journey.division))fail('Escolhe um jogador aprovado deste nível.');
+      const before=JSON.stringify([journey.confirmed,journey.waiting]);
+      if(input.action==='promote'){
+        if(!journey.waiting.includes(input.playerId)||journey.confirmed.length>=journey.capacity)fail('Este jogador já não está em espera ou não há vagas livres.');
+        journey.waiting=journey.waiting.filter(id=>id!==input.playerId);
+      }
+      const result=enrol(journey,input.playerId,input.action==='promote'?'join':input.action);
+      if(before===JSON.stringify([journey.confirmed,journey.waiting]))return {ok:true,message:result};
+      await save(tx,journey);
+      await tx.audit.create({data:{actor:res.locals.session.adminId,action:`${input.action==='leave'?'Saída':'Inscrição'} manual: ${player!.name}, ${journey.division}, ${journey.date}.`}});
+      await notice(tx,journey,`${journey.division} · ${journey.date}\n${result}`,player!.phone);
+      const roster=await tx.player.findMany({where:{id:{in:[...journey.confirmed,...journey.waiting]}}});
+      await queueJourneyRoster(tx,journey,journeyRoster(journey,roster));
+      return {ok:true,message:result};
+    }));
+  });
   app.post('/api/admin/journeys/:id/close', auth, admin, async (req, res) =>
     res.json(
       await db.$transaction(async (tx) => {

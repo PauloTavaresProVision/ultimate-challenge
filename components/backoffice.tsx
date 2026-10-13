@@ -173,8 +173,9 @@ export default function Backoffice({
     void refresh();
     const timer=setInterval(refresh,10000);
     window.addEventListener('focus',refresh);
+    window.addEventListener('tournament-updated',refresh);
     document.addEventListener('visibilitychange',refresh);
-    return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+    return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('tournament-updated',refresh);document.removeEventListener('visibilitychange',refresh);};
   },[!!liveState]);
   const [saveNote, setSaveNote] = useState('');
   async function save(nextPlayers?: Player[], nextAudit?: string[], changes?: Partial<LiveState>) {

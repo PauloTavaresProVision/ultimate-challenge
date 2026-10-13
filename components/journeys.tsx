@@ -1,3 +1,4 @@
+import PlayerPicker from './player-picker';
 import {
   defaultJourneyMessage,
   journeyAnnouncement,
@@ -25,11 +26,13 @@ export default function Journeys({
   courts,
   games,
   calendar,
+  filterDivision = 'Todas',
 }: {
   players: Player[];
   courts: Court[];
   games: Game[];
   calendar: RoundCalendar;
+  filterDivision?: string;
 }) {
   const [items, setItems] = useState<Journey[]>([]),
     [open, setOpen] = useState(false),
@@ -42,6 +45,11 @@ export default function Journeys({
     [capacity, setCapacity] = useState(12),
     [fields, setFields] = useState<string[]>([]);
   const [message, setMessage] = useState(defaultJourneyMessage);
+  const [adding,setAdding]=useState<Record<string,string>>({});
+  const [rosterNotice,setRosterNotice]=useState('');
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
+  const visible=items.filter(j=>j.status!=='drawn'&&j.date>=today&&(filterDivision==='Todas'||j.division===filterDivision)).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+  async function changePlayer(j:Journey,playerId:string,action:'join'|'leave'|'promote'){setBusy(true);setError('');try{const result=await api<{message:string}>('/admin/journeys/'+j.id+'/players','POST',{playerId,action});setRosterNotice(result.message+' A mensagem foi colocada na fila para o grupo.');setAdding({...adding,[j.id]:''});await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   const batch = useRef('');
   const scheduleEdited = useRef({date:false,time:false});
   const refresh = () => api<Journey[]>('/admin/journeys').then(setItems);
@@ -107,8 +115,9 @@ export default function Journeys({
           Abrir inscrições
         </Button>
       </div>
+      {rosterNotice&&<p className="rm-success" role="status">{rosterNotice}</p>}
       <div className="journey-cards">
-      {items.map((j) => (
+      {visible.map((j) => (
         <article key={j.id} className="journey-card">
           <header className="journey-card-heading">
             <div><h3>{j.division}</h3><p>{j.date.split('-').reverse().join('/')} <span>às {j.time}</span></p></div>
@@ -121,6 +130,7 @@ export default function Journeys({
             <div><strong>{Math.max(0,j.capacity-j.confirmed.length)}</strong><span>Vagas livres</span></div>
             <div><strong>{j.waiting.length}</strong><span>Em espera</span></div>
           </div>
+          <details className="rm-registration-roster"><summary>Gerir jogadores e lista de espera</summary>
           <div className="journey-roster">
             <h4>Jogadores confirmados <span>{j.confirmed.length}</span></h4>
             {j.confirmed.length ? <ol className="journey-player-list">
@@ -128,6 +138,7 @@ export default function Journeys({
                 <span className="journey-player-number">{String(index+1).padStart(2,'0')}</span>
                 <span className="journey-player-name">{player?.name ?? 'Jogador indisponível'}</span>
                 {player && <span className="journey-player-side">{player.side}</span>}
+                <Button variant="ghost" disabled={busy} onClick={()=>changePlayer(j,id,'leave')}>Retirar</Button>
               </li>;})}
             </ol> : <p className="journey-empty">Ainda não há jogadores confirmados.</p>}
           </div>
@@ -137,9 +148,13 @@ export default function Journeys({
               {j.waiting.map((id,index)=><li key={id}>
                 <span className="journey-player-number">{index+1}</span>
                 <span className="journey-player-name">{players.find(p=>p.id===id)?.name ?? 'Jogador indisponível'}</span>
+                {j.confirmed.length<j.capacity&&<Button disabled={busy} onClick={()=>changePlayer(j,id,'promote')}>Confirmar vaga</Button>}
+                <Button variant="ghost" disabled={busy} onClick={()=>changePlayer(j,id,'leave')}>Retirar</Button>
               </li>)}
             </ol> : <p className="journey-empty">Ninguém em espera.</p>}
           </div>
+          <div className="rm-registration-add"><PlayerPicker label="Adicionar jogador" players={players.filter(p=>p.status==='Ativo'&&p.verified&&p.division===j.division&&!j.confirmed.includes(p.id)&&!j.waiting.includes(p.id))} value={adding[j.id]??''} onChange={id=>setAdding({...adding,[j.id]:id})} disabled={busy}/><Button disabled={busy||!adding[j.id]} onClick={()=>changePlayer(j,adding[j.id],'join')}>{j.confirmed.length>=j.capacity?'Adicionar à espera':'Adicionar aos confirmados'}</Button><p>As alterações enviam confirmação e a lista atualizada ao grupo. Retirar um jogador não promove automaticamente a lista de espera.</p></div>
+          </details>
           <footer className="journey-card-actions">
           {j.status === 'open' && (
             <Button
@@ -167,9 +182,9 @@ export default function Journeys({
         </article>
       ))}
       </div>
-      {!items.length && (
+      {!visible.length && (
         <p>
-          Ainda não há jornadas. A mensagem de abertura será enviada ao grupo.
+          Sem inscrições por gerir neste nível. Os sorteios preparados estão em Hoje e próximas.
         </p>
       )}
       {error && (

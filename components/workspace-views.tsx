@@ -1,9 +1,8 @@
 import DraftSubstitution from './draft-substitution';
 'use client';
-import Journeys from './journeys';
 import DrawDialog from './draw-dialog';
 import {nextRoundCalendar,normalizeCalendar,type WeeklyCalendar,type RoundCalendar} from '../lib/weekly-calendar';
-import Substitutions from './substitutions';
+import RoundManagement from './round-management';
 import RulesEditor from './rules-editor';
 import CalendarSettings from './calendar-settings';
 import {api} from './whatsapp-live';
@@ -378,11 +377,11 @@ export default function WorkspaceViews({
       return;
     }
     const sameRound = games.find(
-      (g) => g.round === editGame.round && g.id !== editGame.id,
+      (g) => g.round === editGame.round && g.division === editGame.division && g.id !== editGame.id,
     );
     if (sameRound && editGame.date !== sameRound.date) {
       setError(
-        'Nesta versão, todos os jogos da ronda devem manter a mesma data.',
+        'Os jogos desta divisão e ronda devem manter a mesma data.',
       );
       return;
     }
@@ -756,8 +755,10 @@ export default function WorkspaceViews({
       )}
       {view === 'Rondas e sorteios' && (
         <>
-          {live && <Substitutions />}
-          {live && <Journeys players={players} courts={courts} games={games} calendar={roundCalendar}/>}
+          {live && <RoundManagement games={games} players={players} courts={courts} calendar={roundCalendar} division={division} saving={!!saving}
+            publish={async rows=>{if(await persist({games:games.map(g=>rows.some(r=>r.id===g.id)?{...g,published:true}:g)},`Ronda ${rows[0].round} · ${rows[0].division} publicada.`))inform('Sorteio publicado. O envio ao grupo segue o agendamento configurado.');}}
+            renderGame={g=><GameCard key={g.id} game={g} players={players} courts={courts} onEdit={()=>{setError('');setReason('');setEditGame({...g});}}/>}/>}
+          {!live&&<>
           {!live&&<section className="panel">
             <div className="section-heading"><div><h2>Sorteios por divisão</h2><p>Escolhe o nível, os participantes e os campos. Revê o resultado antes de publicar.</p></div>
             <Button disabled={live||saving||calendarLoading||!!calendarError} onClick={()=>setDrawOpen(true)}><Shuffle size={17}/> Preparar sorteio</Button></div>
@@ -827,6 +828,7 @@ export default function WorkspaceViews({
               </p>
             </div>
           )}
+          </>}
         </>
       )}
       {view === 'Jogos e resultados' && (

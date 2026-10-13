@@ -1,20 +1,45 @@
 import PlayerPicker from './player-picker';
 import {useEffect,useState} from 'react';
+import {Search,UserRoundMinus,ArrowRightLeft} from 'lucide-react';
 import {api} from './whatsapp-live';
 import {Button} from './ui/button';
+import {Dialog,DialogContent,DialogTitle,DialogDescription} from './ui/dialog';
+
 type Player={id:string;name:string;side:string;division:string};
-type Vacancy={id:string;round:number;date:string;playerId:string;name:string;side:string;division:string;candidates:string[];status:string;substituteId?:string};
-type Data={players:Player[];vacancies:Vacancy[];games:{round:number;date:string;a:string[];b:string[]}[]};
-export default function Substitutions(){
- const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[round,setRound]=useState(''),[absent,setAbsent]=useState(''),[selection,setSelection]=useState<Record<string,string>>({});
+type Vacancy={id:string;round:number;date:string;playerId:string;name:string;side:string;division:string;candidates:string[];status:string};
+type Data={players:Player[];vacancies:Vacancy[];games:{round:number;date:string;division:string;published:boolean;winner:string|null;a:string[];b:string[]}[]};
+export default function Substitutions({round,date,division}:{round:number;date:string;division:string}){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[search,setSearch]=useState('');
+ const [action,setAction]=useState<{player:Player;mode:'remove'|'replace';vacancy?:Vacancy}|null>(null),[incoming,setIncoming]=useState('');
  async function refresh(){setData(await api<Data>('/admin/substitutions'));}
- useEffect(()=>{let active=true;const poll=()=>api<Data>('/admin/substitutions').then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});void poll();const timer=setInterval(poll,10000);return()=>{active=false;clearInterval(timer);};},[]);
- async function act(path:string,body:unknown){setBusy(true);setError('');try{await api('/admin/substitutions'+path,'POST',body);await refresh();setNotice('Alteração guardada. Atualiza a página para carregar os jogos e a classificação atualizados.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- return <section className="panel substitutions-panel"><div className="section-heading"><div><h2>Ausências e suplentes</h2><p>A escolha é sempre tua: seleciona um jogador ou aprova um voluntário do WhatsApp.</p></div><Button variant="outline" disabled={busy} onClick={()=>refresh().catch(e=>setError(e.message))}>Atualizar lista</Button></div><p>Estas ações ficam guardadas imediatamente.</p>
- {error&&<p className="form-error" role="alert">{error}</p>}{notice&&<p role="status">{notice} <Button variant="outline" onClick={()=>location.reload()}>Atualizar página</Button></p>}
- {data&&<><form className="substitution-form" onSubmit={e=>{e.preventDefault();void act('',{round:Number(round),playerId:absent});}}><label className="field">Ronda<select required value={round} onChange={e=>{setRound(e.target.value);setAbsent('');}}><option value="">Escolher ronda</option>{[...new Set(data.games.map(g=>g.round))].map(r=><option key={r} value={r}>Ronda {r} · {data.games.find(g=>g.round===r)?.date}</option>)}</select></label><PlayerPicker label="Jogador ausente" disabled={!round||busy} value={absent} onChange={setAbsent} players={data.players.filter(p=>data.games.some(g=>g.round===Number(round)&&[...g.a,...g.b].includes(p.id)))}/><Button disabled={busy||!absent} type="submit">Registar ausência</Button></form>
- {!data.vacancies.some(v=>v.status==='pending')&&<p>Não há vagas à espera de suplente.</p>}
- {data.vacancies.filter(v=>v.status==='pending').map(v=>{const eligible=data.players.filter(p=>p.id!==v.playerId&&p.division===v.division&&p.side===v.side&&!data.games.some(g=>(g.round===v.round||g.date===v.date)&&[...g.a,...g.b].includes(p.id)));return <div className="substitution-vacancy" key={v.id}><h3>{v.name} · Aguarda suplente</h3><p>Ronda {v.round} · {v.date} · {v.division} · {v.side} · 4 jogos</p><p>Voluntários: {v.candidates.length?v.candidates.map(id=>data.players.find(p=>p.id===id)?.name??'Jogador').join(', '):'Ainda não há candidatos.'}</p><PlayerPicker label="Escolher suplente" disabled={busy} value={selection[v.id]??''} onChange={id=>setSelection({...selection,[v.id]:id})} players={eligible} volunteers={v.candidates}/>{!eligible.length&&<p>Não há jogadores livres do mesmo lado e divisão. Aprova a inscrição de um suplente para o poderes selecionar.</p>}<div className="dialog-actions"><Button variant="outline" disabled={busy} onClick={()=>act('/'+v.id+'/cancel',{})}>Cancelar ausência</Button><Button disabled={busy||!eligible.some(p=>p.id===selection[v.id])} onClick={()=>act('/'+v.id+'/approve',{playerId:selection[v.id]})}>Aprovar substituição</Button></div></div>;})}
- <p>Os pontos pertencem ao suplente que joga. O ausente não recebe pontos desta ronda.</p></>}
- </section>;
+ useEffect(()=>{let active=true;const poll=()=>api<Data>('/admin/substitutions').then(d=>{if(active){setData(d);setError('');}}).catch(e=>{if(active)setError(e.message);});void poll();const timer=setInterval(poll,10000);return()=>{active=false;clearInterval(timer);};},[]);
+ async function act(path:string,body:unknown){setBusy(true);setError('');try{await api('/admin/substitutions'+path,'POST',body);setAction(null);setIncoming('');setNotice('Alteração guardada. Os jogos e a lista de jogadores foram atualizados.');window.dispatchEvent(new Event('tournament-updated'));await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const own=data?.games.filter(g=>g.round===round&&g.date===date&&g.division===division)??[];
+ const pending=data?.vacancies.filter(v=>v.status==='pending'&&v.round===round&&v.date===date&&v.division===division)??[];
+ const ids=new Set(own.flatMap(g=>[...g.a,...g.b]));
+ const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const roster=(data?.players??[]).filter(p=>ids.has(p.id)).sort((a,b)=>a.name.localeCompare(b.name,'pt'));
+ const outgoing=action?.player;
+ const pair=outgoing?own.flatMap(g=>[g.a,g.b]).find(pair=>pair.includes(outgoing.id)):undefined;
+ const side=pair?.indexOf(outgoing?.id??'')===0?'Esquerda':'Direita';
+ const eligible=(data?.players??[]).filter(p=>p.id!==outgoing?.id&&p.division===division&&(!own.some(g=>g.published)||p.side===side)&&!data?.games.some(g=>(g.round===round||g.date===date)&&[...g.a,...g.b].includes(p.id)));
+ return <div className="rm-roster">
+  <div className="rm-roster-top"><div><h3>{roster.length-pending.length} jogadores presentes {pending.length>0&&<span>· {pending.length} por substituir</span>}</h3><p>Retira quem falta ou troca diretamente por outro jogador.</p></div><label className="rm-search"><Search size={17}/><input aria-label="Pesquisar nesta jornada" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar jogador…"/></label></div>
+  {error&&<p className="form-error" role="alert">{error}</p>}{notice&&<p className="rm-success" role="status">{notice}</p>}
+  {!data&&!error&&<p role="status">A carregar jogadores…</p>}
+  {data&&<ul className="rm-player-list">{roster.filter(p=>normalize(p.name).includes(normalize(search))).map(p=>{
+   const vacancy=pending.find(v=>v.playerId===p.id), games=own.filter(g=>[...g.a,...g.b].includes(p.id)),canChange=games.length===4&&games.every(g=>!g.winner);
+   return <li key={p.id}><div><strong>{p.name}</strong><small>{vacancy?'Saiu · lugar à espera de suplente':p.side}{!canChange?' · Já tem resultados':''}</small></div><div className="rm-player-actions">
+    {vacancy?<><Button variant="outline" disabled={busy} onClick={()=>act('/'+vacancy.id+'/cancel',{})}>Anular saída</Button><Button disabled={busy||!canChange} onClick={()=>{setIncoming('');setAction({player:p,mode:'replace',vacancy});}}>Escolher suplente</Button></>:<><Button variant="outline" disabled={busy||!canChange} onClick={()=>{setIncoming('');setAction({player:p,mode:'replace'});}}><ArrowRightLeft size={15}/>Substituir</Button><Button variant="ghost" disabled={busy||!canChange} onClick={()=>setAction({player:p,mode:'remove'})}><UserRoundMinus size={15}/>Retirar</Button></>}
+   </div></li>;
+  })}</ul>}
+  {data&&!roster.filter(p=>normalize(p.name).includes(normalize(search))).length&&<p>Nenhum jogador encontrado nesta jornada.</p>}
+  <Dialog open={!!action} onOpenChange={open=>{if(!open&&!busy){setAction(null);setError('');}}}><DialogContent className="rm-change-dialog"><DialogTitle>{action?.mode==='remove'?'Retirar jogador':'Substituir jogador'}</DialogTitle><DialogDescription>{division} · {date.split('-').reverse().join('/')} · Ronda {round}</DialogDescription>
+   <div className="rm-outgoing"><small>SAI</small><strong>{outgoing?.name}</strong></div>
+   {action?.mode==='replace'?<><PlayerPicker label="Entra no lugar dele" players={eligible} value={incoming} onChange={setIncoming} disabled={busy} volunteers={action.vacancy?.candidates}/>{incoming&&eligible.find(p=>p.id===incoming)?.side!==side&&<p className="rm-warning">Nesta ronda, o suplente jogará à {side.toLowerCase()}, embora a ficha indique outro lado.</p>}<p>O suplente ocupa o lugar nos quatro jogos, mantendo a dupla, os horários e os campos. A lista de confirmados também é atualizada.</p>{!eligible.length&&<p className="rm-warning">Não há jogadores livres do mesmo nível e lado. Verifica a ficha do suplente antes de continuar.</p>}</>:<p>Fica assinalado como ausente. Os quatro jogos ficam à espera de suplente, que podes escolher mais tarde. Não são apagados jogos nem promovidos jogadores automaticamente.</p>}
+   <p>{own.some(g=>g.published)?'A alteração será anunciada no grupo.':'O sorteio continua em rascunho. Esta alteração não envia mensagens ao grupo.'}</p>
+   {error&&<p className="form-error" role="alert">{error}</p>}
+   <div className="dialog-actions"><Button variant="outline" disabled={busy} onClick={()=>setAction(null)}>Voltar</Button><Button disabled={busy||(action?.mode==='replace'&&!eligible.some(p=>p.id===incoming))} onClick={()=>{if(!action)return;void act(action.mode==='remove'?'':action.vacancy?'/'+action.vacancy.id+'/approve':'/replace',action.mode==='remove'?{round,playerId:action.player.id}:action.vacancy?{playerId:incoming}:{round,playerId:action.player.id,substituteId:incoming});}}>{busy?'A guardar…':action?.mode==='remove'?'Confirmar saída':'Confirmar substituição'}</Button></div>
+  </DialogContent></Dialog>
+ </div>;
 }

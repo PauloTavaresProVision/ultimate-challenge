@@ -1,5 +1,5 @@
 import { db } from './db.ts';
-import { addDays, movementPlan, monthRecord } from './competition-rules.ts';
+import { addDays, movementPlan, monthRecord, exceptionalM2Cycle } from './competition-rules.ts';
 import type { Player, Game } from '../../lib/tournament.ts';
 export async function runCompetition(today = new Date().toLocaleDateString('en-CA', {timeZone:'Africa/Luanda'})) {
   return db.$transaction(async tx => {
@@ -14,6 +14,12 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
     const save = async (key:string,value:unknown) => { const text=JSON.stringify(value); await tx.setting.upsert({where:{key},create:{key,value:text},update:{value:text}}); known.set(key,text); };
     const anchor = known.has('competition:anchor') ? JSON.parse(known.get('competition:anchor')!) as string : games[0].date;
     if (!known.has('competition:anchor')) await save('competition:anchor',anchor);
+    const exceptionKey='competition:exception:m2-20-2026-10-14';
+    if(!known.has(exceptionKey)){
+      const date=exceptionalM2Cycle(anchor);
+      await save(exceptionKey,{date,count:20,mode:'last-overall',status:known.has('competition:move:'+date)?'missed':'pending'});
+    }
+    const exception=JSON.parse(known.get(exceptionKey)!) as {date:string;count:number;mode:string;status:string};
     const events: {date:string;type:'month'|'move';key:string;month?:string}[]=[];
     for(let date=addDays(anchor,14);date<=today;date=addDays(date,14)) if(!known.has('competition:move:'+date)) events.push({date,type:'move',key:'competition:move:'+date});
     let month=anchor.slice(0,7);
@@ -28,11 +34,13 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
         await tx.audit.create({data:{actor:'system',action:`Mês ${event.month} encerrado. Campeões e classificação guardados; novo mês a zero.`}});
       } else {
         let changes;
-        try { changes=movementPlan(players,games,event.date); } catch(e) { blocked=(e as Error).message; break; }
+        const special=exception.status==='pending'&&event.date===exception.date;
+        try { changes=movementPlan(players,games,event.date,special?20:undefined); } catch(e) { blocked=(e as Error).message; break; }
         if(games.some(g=>g.date>=event.date && [...g.a,...g.b].some(id=>changes.some(c=>c.id===id)))) { blocked=`A troca de ${event.date} aguarda revisão dos jogos já publicados para depois dessa data.`; break; }
         for(const change of changes) await tx.player.update({where:{id:change.id},data:{division:change.to}});
         players=players.map(p=>({...p,division:(changes.find(c=>c.id===p.id)?.to??p.division) as Player['division']}));
-        await save(event.key,{date:event.date,changes});
+        await save(event.key,{date:event.date,changes,...(special?{m2Relegations:20}:{})});
+        if(special){exception.status='applied';await save(exceptionKey,exception);}
         await tx.audit.create({data:{actor:'system',action:`Subidas e descidas de ${event.date} aplicadas: ${changes.map(c=>`${c.name}: ${c.from} → ${c.to}`).join('; ')}. Pontos mantidos.`}});
       }
       changed=true;

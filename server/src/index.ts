@@ -495,7 +495,7 @@ installGroupCompose(app, auth, admin);
 installRoundMessages(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
-  res.json({months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});
+  res.json({m2Exception:JSON.parse(rows.find(r=>r.key==='competition:exception:m2-20-2026-10-14')?.value??'null'),months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});
 });
 app.use(express.static(resolve('web')));
 app.get('/{*path}', (_req, res) => res.sendFile(resolve('web/index.html')));

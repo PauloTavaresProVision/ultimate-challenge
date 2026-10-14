@@ -54,6 +54,7 @@ const menus = [
   ['Inscrições', UserRoundPlus],
   ['Jogadores', Users],
   ['Classificação', Trophy],
+  ['Ranking geral', Trophy],
   ['Rondas e sorteios', Shuffle],
   ['Jogos e resultados', CalendarDays],
   ['Campos', MapPin],

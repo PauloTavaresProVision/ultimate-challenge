@@ -1,3 +1,5 @@
+import OverallRanking from './overall-ranking';
+import {overallRanking} from '../lib/overall-ranking';
 import ResultsBoard from './results-board';
 import DraftSubstitution from './draft-substitution';
 'use client';
@@ -608,6 +610,7 @@ export default function WorkspaceViews({
           </div>
         </section>
       )}
+      {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games)} division={division}/>}
       {view === 'Classificação' && (
         <>
           <div className="info-note">

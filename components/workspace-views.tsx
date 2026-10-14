@@ -1,3 +1,4 @@
+import ResultsBoard from './results-board';
 import DraftSubstitution from './draft-substitution';
 'use client';
 import DrawDialog from './draw-dialog';
@@ -248,12 +249,6 @@ export default function WorkspaceViews({
   const nextRound =
     pendingRound ?? Math.max(0, ...divisionGames.map((g) => g.round)) + 1;
   const roundGames = divisionGames.filter((g) => g.round === nextRound);
-  const relevantGames = games.filter(
-    (g) =>
-      (division === 'Todas' || g.division === division) &&
-      (status === 'Todos' ||
-        (status === 'Confirmados' ? !!g.winner : !g.winner)),
-  );
   async function playerAction(action: 'save' | 'approve' | 'reject' | 'restore') {
     if (saving || manualBusy) return;
     if (!editPlayer) return;
@@ -831,45 +826,7 @@ export default function WorkspaceViews({
           </>}
         </>
       )}
-      {view === 'Jogos e resultados' && (
-        <>
-          <div className="section-heading">
-            <div>
-              <h2>Todos os confrontos</h2>
-              <p>
-                Consulta horários e regista os resultados como administrador.
-              </p>
-            </div>
-            <Choice
-              label="Estado do jogo"
-              value={status}
-              onChange={setStatus}
-              options={['Todos', 'Confirmados', 'Por realizar']}
-            />
-          </div>
-          <div className="games-grid">
-            {relevantGames.map((g) => (
-              <GameCard
-                key={g.id}
-                game={g}
-                players={players}
-                courts={courts}
-                onEdit={() => {
-                  setError('');
-                  setReason('');
-                  setEditGame({ ...g });
-                }}
-              />
-            ))}
-          </div>
-          {!relevantGames.length && (
-            <Blank
-              title="Sem jogos neste filtro"
-              description="Escolhe outra divisão ou estado."
-            />
-          )}
-        </>
-      )}
+      {view === 'Jogos e resultados' && <ResultsBoard games={games} players={players} courts={courts} division={division} today={live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()):'2026-09-07'} onEdit={g=>{setError('');setReason('');setEditGame({...g});}}/>}
       {view === 'WhatsApp' && (
         <>
           <section className="panel integration-panel">
@@ -1237,8 +1194,8 @@ export default function WorkspaceViews({
           <DialogHeader>
             <DialogTitle>Gerir jogo · {editGame?.division}</DialogTitle>
             <DialogDescription>
-              Alterações administrativas recalculam os pontos nesta
-              demonstração.
+              {editGame && `Ronda ${editGame.round} · ${editGame.date.split('-').reverse().join('/')} · ${editGame.time} · ${courts.find(c=>c.id===editGame.court)?.name ?? 'Campo'}. `}
+              As correções de resultados recalculam a classificação.
             </DialogDescription>
           </DialogHeader>
           {editGame && (

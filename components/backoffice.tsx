@@ -204,10 +204,18 @@ export default function Backoffice({
     }
   }
   const [division, setDivision] = useState('Todas');
+  const currentMonth = liveState
+    ? new Intl.DateTimeFormat('sv-SE', {timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).slice(0,7)
+    : '2026-09';
+  const [month, setMonth] = useState(currentMonth);
+  const availableMonths = [...new Set([currentMonth, month, ...games.map(g => g.date.slice(0,7))])]
+    .filter(value => /^\d{4}-\d{2}$/.test(value)).sort().reverse();
+  const monthLabel = (value: string) => new Date(value + '-15T12:00:00').toLocaleDateString('pt-PT', {month:'long',year:'numeric'});
+  const showMonth = ['Visão geral','Classificação','Rondas e sorteios','Jogos e resultados','Histórico'].includes(view);
+  const monthGames = games.filter(g => g.date.startsWith(month));
   const pending = players.filter((p) => p.status === 'Pendente');
   const active = players.filter((p) => p.status === 'Ativo');
-  const month = liveState ? new Date().toISOString().slice(0, 7) : '2026-09';
-  const ranks = rankings(players, games, month);
+  const ranks = rankings(players, games.filter(g => g.published), month);
   const leaders = divisions.map((d) => ranks.find((p) => p.division === d));
   return (
     <SidebarProvider>
@@ -273,16 +281,16 @@ export default function Backoffice({
             </p>
           )}
           <div className="period-row">
-            <div className="period">
+            {showMonth ? <div className="period" style={{flexWrap:'wrap'}}>
               <CalendarDays size={17} />
-              <strong>
-                {new Date(month + '-15T12:00:00').toLocaleDateString('pt-PT', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </strong>
-              <Badge tone="neutral">Mês ativo</Badge>
-            </div>
+              <label htmlFor="backoffice-month" className="sr-only">Mês a consultar</label>
+              <select id="backoffice-month" value={month} onChange={event => setMonth(event.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-[#173d50] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173d50]">
+                {availableMonths.map(value => <option key={value} value={value}>{monthLabel(value)}</option>)}
+              </select>
+              <Badge tone="neutral">{month === currentMonth ? 'Mês atual' : 'Mês em consulta'}</Badge>
+              {month !== currentMonth && <Button variant="ghost" onClick={() => setMonth(currentMonth)}>Voltar ao mês atual</Button>}
+            </div> : <div className="period">{view === 'Ranking geral' && <strong>Todos os meses · acumulado</strong>}</div>}
             <div className="division-filters">
               {['Todas', ...divisions].map((d) => (
                 <button
@@ -307,8 +315,8 @@ export default function Backoffice({
                   },
                   {
                     label: 'Jogos realizados',
-                    value: games.filter((g) => g.winner).length,
-                    detail: 'Resultados confirmados',
+                    value: monthGames.filter((g) => g.published && g.winner).length,
+                    detail: `Resultados de ${monthLabel(month)}`,
                     Icon: CalendarDays,
                   },
                   {
@@ -423,7 +431,7 @@ export default function Backoffice({
                   <h2>
                     Na frente da escada <Trophy size={18} />
                   </h2>
-                  <p>Um líder por divisão. O mês ainda está em jogo.</p>
+                  <p>{month === currentMonth ? 'Um líder por divisão' : 'Pontos do mês, agrupados pelo nível atual. Consulta a classificação para ver o fecho do ciclo'} · {monthLabel(month)}.</p>
                 </div>
                 <button
                   className="text-link"
@@ -491,7 +499,7 @@ export default function Backoffice({
                 <div className="section-heading">
                   <div>
                     <h2>Últimos jogos</h2>
-                    <p>Consulta os confrontos do torneio</p>
+                    <p>Confrontos de {monthLabel(month)}</p>
                   </div>
                   <button
                     className="text-link"
@@ -500,10 +508,12 @@ export default function Backoffice({
                     Ver todos <ArrowRight size={15} />
                   </button>
                 </div>
-                {games
+                {!monthGames.some(g => division === 'Todas' || g.division === division) && <p className="muted">Não há jogos neste mês para o nível selecionado.</p>}
+                {monthGames
                   .filter(
                     (g) => division === 'Todas' || g.division === division,
                   )
+                  .sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
                   .slice(0, 3)
                   .map((g) => (
                     <div className="recent-game" key={g.id}>
@@ -514,7 +524,7 @@ export default function Backoffice({
                             {courts.find((c) => c.id === g.court)?.name}
                           </strong>
                           <small>
-                            {g.date.slice(8)} set · {g.time}
+                            {new Date(g.date + 'T12:00:00').toLocaleDateString('pt-PT', {day:'2-digit',month:'short'})} · {g.time}
                           </small>
                         </div>
                       </div>
@@ -555,6 +565,7 @@ export default function Backoffice({
               key={view}
               view={view}
               division={division}
+              month={month}
               onDivisionChange={setDivision}
               players={players}
               setPlayers={setPlayers}

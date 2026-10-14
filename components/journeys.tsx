@@ -27,12 +27,14 @@ export default function Journeys({
   games,
   calendar,
   filterDivision = 'Todas',
+  filterMonth,
 }: {
   players: Player[];
   courts: Court[];
   games: Game[];
   calendar: RoundCalendar;
   filterDivision?: string;
+  filterMonth?: string;
 }) {
   const [items, setItems] = useState<Journey[]>([]),
     [open, setOpen] = useState(false),
@@ -48,7 +50,7 @@ export default function Journeys({
   const [adding,setAdding]=useState<Record<string,string>>({});
   const [rosterNotice,setRosterNotice]=useState('');
   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
-  const visible=items.filter(j=>j.status!=='drawn'&&j.date>=today&&(filterDivision==='Todas'||j.division===filterDivision)).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+  const visible=items.filter(j=>j.status!=='drawn'&&j.date>=today&&(!filterMonth||j.date.startsWith(filterMonth))&&(filterDivision==='Todas'||j.division===filterDivision)).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
   async function changePlayer(j:Journey,playerId:string,action:'join'|'leave'|'promote'){setBusy(true);setError('');try{const result=await api<{message:string}>('/admin/journeys/'+j.id+'/players','POST',{playerId,action});setRosterNotice(result.message+' A mensagem foi colocada na fila para o grupo.');setAdding({...adding,[j.id]:''});await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   const batch = useRef('');
   const scheduleEdited = useRef({date:false,time:false});

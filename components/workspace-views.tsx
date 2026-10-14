@@ -86,6 +86,7 @@ import {
   type Division,
 } from '@/lib/tournament';
 type Props = {
+  month?: string;
   editingRef?: {current:boolean};
   saving?: boolean;
   onSavePlayers?: (players: Player[], audit: string[]) => Promise<void>;
@@ -167,6 +168,7 @@ const blankPlayer: Player = {
   note: '',
 };
 export default function WorkspaceViews({
+  month: selectedMonth,
   editingRef,
   live = false,
   audit,
@@ -203,8 +205,22 @@ export default function WorkspaceViews({
   const [settingsTab,setSettingsTab]=useState('general');
   const [calendarLoading,setCalendarLoading]=useState(!!live);
   const [calendarError,setCalendarError]=useState('');
-  const month = live ? new Date().toISOString().slice(0, 7) : '2026-09';
-  const monthEnd = new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate();
+  const activeMonth=live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()).slice(0,7):'2026-09';
+  const month=selectedMonth??activeMonth;
+  const editMonth=games.find(g=>g.id===editGame?.id)?.date.slice(0,7)??month;
+  const monthEnd=new Date(Number(editMonth.slice(0,4)),Number(editMonth.slice(5)),0).getDate();
+  type ArchiveRow=Pick<Player,'id'|'name'|'division'|'side'>&{points:number;wins:number;losses:number;bonus:number};
+  const [archives,setArchives]=useState<{month:string;table:ArchiveRow[]}[]>([]);
+  const [archiveLoading,setArchiveLoading]=useState(false),[archiveError,setArchiveError]=useState('');
+  useEffect(()=>{
+    if(!live||!['Classificação','Jogos e resultados','Rondas e sorteios'].includes(view))return;
+    let active=true;setArchiveLoading(true);
+    const load=()=>api<{months:{month:string;table:ArchiveRow[]}[]}>('/admin/competition').then(d=>{if(active){setArchives(d.months);setArchiveError('');}}).catch(e=>{if(active)setArchiveError(e.message);}).finally(()=>{if(active)setArchiveLoading(false);});
+    void load();const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);};
+  },[live,view]);
+  const archive=archives.find(a=>a.month===month);
+  const editClosed=archives.some(a=>a.month===editMonth);
+
   const [roundCalendar,setRoundCalendar]=useState<RoundCalendar>(()=>nextRoundCalendar(normalizeCalendar(),games,live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()):'2026-09-07'));
   useEffect(()=>{if(!live)return;let active=true;setCalendarLoading(true);setCalendarError('');
     api<WeeklyCalendar>('/admin/calendar').then(c=>{
@@ -242,7 +258,7 @@ export default function WorkspaceViews({
         .toLocaleLowerCase('pt')
         .includes(search.toLocaleLowerCase('pt')),
   );
-  const rank = rankings(players, games, month);
+  const rank = archive?.table??rankings(players,games.filter(g=>g.published),month);
   const name = (id: string) =>
     players.find((p) => p.id === id)?.name ?? 'Jogador removido';
   const teams = (g: Game, team: 'a' | 'b') => g[team].map(name).join(' / ');
@@ -354,14 +370,15 @@ export default function WorkspaceViews({
   }
   async function saveGame() {
     if (saving || !editGame) return;
+    if(editClosed){setError('Este mês está encerrado. Os resultados estão disponíveis apenas para consulta.');return;}
     if (
-      !editGame.date.startsWith(month) ||
+      !editGame.date.startsWith(editMonth) ||
       !editGame.time ||
       editGame.duration < 15 ||
       editGame.duration > 240
     ) {
       setError(
-        'Indica data no mês ativo, hora e duração entre 15 e 240 minutos.',
+        'Mantém a data no mês deste jogo e indica hora e duração entre 15 e 240 minutos.',
       );
       return;
     }
@@ -613,6 +630,7 @@ export default function WorkspaceViews({
       {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games)} division={division}/>}
       {view === 'Classificação' && (
         <>
+          {archiveError&&<p className="form-error" role="alert">Não foi possível consultar o histórico: {archiveError}</p>}
           <div className="info-note">
             <Trophy size={20} />
             <span>
@@ -636,7 +654,7 @@ export default function WorkspaceViews({
                     </Badge>{' '}
                     Classificação individual
                   </h2>
-                  <span className="muted">{month} · provisória</span>
+                  <span className="muted">{month} · {archiveLoading?'A consultar…':archive?'Classificação final':month<activeMonth?'Por fechar':'Provisória'}</span>
                 </div>
                 <Table>
                   <TableHeader>
@@ -655,7 +673,7 @@ export default function WorkspaceViews({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rank
+                    {(archiveLoading||archiveError?[]:rank)
                       .filter((p) => p.division === d)
                       .map((p, i) => (
                         <TableRow
@@ -753,7 +771,7 @@ export default function WorkspaceViews({
       )}
       {view === 'Rondas e sorteios' && (
         <>
-          {live && <RoundManagement games={games} players={players} courts={courts} calendar={roundCalendar} division={division} saving={!!saving}
+          {live && <RoundManagement month={month} games={games} players={players} courts={courts} calendar={roundCalendar} division={division} saving={!!saving}
             publish={async rows=>{if(await persist({games:games.map(g=>rows.some(r=>r.id===g.id)?{...g,published:true}:g)},`Ronda ${rows[0].round} · ${rows[0].division} publicada.`))inform('Sorteio publicado. O envio ao grupo segue o agendamento configurado.');}}
             renderGame={g=><GameCard key={g.id} game={g} players={players} courts={courts} onEdit={()=>{setError('');setReason('');setEditGame({...g});}}/>}/>}
           {!live&&<>
@@ -829,7 +847,7 @@ export default function WorkspaceViews({
           </>}
         </>
       )}
-      {view === 'Jogos e resultados' && <ResultsBoard games={games} players={players} courts={courts} division={division} today={live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()):'2026-09-07'} onEdit={g=>{setError('');setReason('');setEditGame({...g});}}/>}
+      {view === 'Jogos e resultados' && <ResultsBoard readOnly={!!archive} month={month} games={games} players={players} courts={courts} division={division} today={live?new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date()):'2026-09-07'} onEdit={g=>{setError('');setReason('');setEditGame({...g});}}/>}
       {view === 'WhatsApp' && (
         <>
           <section className="panel integration-panel">
@@ -886,7 +904,7 @@ export default function WorkspaceViews({
       )}
       {view === 'Histórico' && (
         <>
-          {live ? <CompetitionLive history /> : <>
+          {live ? <CompetitionLive history month={month} /> : <>
           <section className="panel">
             <div className="section-heading">
               <h2>Histórico mensal</h2>
@@ -1208,6 +1226,8 @@ export default function WorkspaceViews({
                 saveGame();
               }}
             >
+              {editClosed&&<p className="info-note">Mês encerrado · apenas consulta. A classificação final está preservada.</p>}
+              <fieldset disabled={editClosed||saving} style={{border:0,padding:0,margin:0,minWidth:0}}>
               <div className="form-grid">
                 <Field label="Campo">
                   <Select
@@ -1240,8 +1260,8 @@ export default function WorkspaceViews({
                     required
                     type="date"
                     value={editGame.date}
-                    min={month + '-01'}
-                    max={month + '-' + monthEnd}
+                    min={editMonth + '-01'}
+                    max={editMonth + '-' + monthEnd}
                     onChange={(e) =>
                       setEditGame({ ...editGame, date: e.target.value })
                     }
@@ -1310,6 +1330,7 @@ export default function WorkspaceViews({
               <div className="dialog-actions">
                 <Button type="submit" disabled={saving || manualBusy}>{saving ? "A guardar…" : "Guardar jogo"}</Button>
               </div>
+              </fieldset>
             </form>
           )}
         </DialogContent>

@@ -25,6 +25,25 @@ test('Historical table retains the player historical division and archived score
  assert.equal(months[1].rows[0].points,50);assert.equal(months[1].archived,true);
 });
 
+test('Unclosed past months remain selectable and infer historical division from published games',()=>{
+ const changed=players.map(p=>p.id==='0'?{...p,division:'M1' as const}:p);
+ const months=playerStandings('0',changed,[{...game,winner:'a'},{...game,id:'draft',date:'2026-07-01',published:false}],'2026-10');
+ assert.deepEqual(months.map(m=>m.month),['2026-10','2026-09']);
+ assert.equal(months[0].division,'M1');
+ assert.equal(months[1].division,'M2+');
+ assert.equal(months[1].archived,false);
+ assert.equal(months[1].rows.find(p=>p.isYou)?.points,3);
+});
+
+test('Archive overrides computed past results without duplicate months',()=>{
+ const archive={month:'2026-09',table:[{id:'0',name:'Archived name',division:'M1',points:40,wins:10,losses:0,bonus:10}]};
+ const months=playerStandings('0',players,[{...game,winner:'a'}],'2026-10',[archive]);
+ assert.deepEqual(months.map(m=>m.month),['2026-10','2026-09']);
+ assert.equal(months[1].archived,true);
+ assert.equal(months[1].division,'M1');
+ assert.equal(months[1].rows[0].points,40);
+});
+
 
 test('All four divisions are available with independent positions and safe public fields',()=>{
  const [current,old]=playerStandings('0',players,[{...game,winner:'a'}],'2026-09',[{month:'2026-08',table:[

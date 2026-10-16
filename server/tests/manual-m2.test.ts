@@ -19,6 +19,13 @@ test('Manual relegation requires admin, preview revision, applies exactly once a
  const get=routes.get('GET /api/admin/competition/manual-m2')!.at(-1),post=routes.get('POST /api/admin/competition/manual-m2')!.at(-1);
  let plan:any;const res={locals:{session:{adminId:'admin'}},json:(value:any)=>{plan=value;}};
  try{
+  settings.set(key,JSON.stringify({date:today,count:20,status:'missed'}));
+  settings.set('competition:move:'+today,JSON.stringify({date:today,changes:[{id:'p0',from:'M2+',to:'M2'},{id:'p1',from:'M2+',to:'M2'}]}));
+  await assert.rejects(()=>get({},res),/automático.*desceu 2/);assert.equal(updates,0);
+  settings.set('competition:move:manual-m2-'+today,JSON.stringify({date:today,changes:Array(20).fill({id:'p0',from:'M2+',to:'M2'})}));
+  await assert.rejects(()=>get({},res),/manual já está registada/);assert.equal(updates,0);
+  settings.delete('competition:move:manual-m2-'+today);
+  settings.set('competition:move:'+today,JSON.stringify({date:today,changes:[]}));
   await get({},res);assert.equal(plan.changes.length,20);assert.equal(updates,0);
   const input={revision:plan.revision,ids:plan.changes.map((p:any)=>p.id)};
   await assert.rejects(()=>post({body:{...input,revision:0}},res),/mudaram/);assert.equal(updates,0);

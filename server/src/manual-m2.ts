@@ -14,13 +14,26 @@ async function preview(tx:Prisma.TransactionClient,direction:Direction){
  if(!first)fail('Ainda não há jogos publicados.');
  const anchor=JSON.parse((await tx.setting.findUnique({where:{key:'competition:anchor'}}))?.value??JSON.stringify(first!.date));
  const exception=JSON.parse((await tx.setting.findUnique({where:{key}}))?.value??JSON.stringify({date:exceptionalM2Cycle(anchor),count:20,status:'pending'}));
- const downApplied=!!exception.downApplied||exception.status==='applied-manual';
- const upApplied=!!exception.upApplied;
- if((direction==='down'?downApplied:upApplied)||!['pending','applied-manual'].includes(exception.status))fail('Esta operação já foi processada. Não pode ser repetida.');
- const completedCycle=await tx.setting.findUnique({where:{key:'competition:move:'+exception.date}});
- if(completedCycle&&!(direction==='up'&&downApplied&&!upApplied))fail('O ciclo desta exceção já foi processado.');
+ const cycleRow=await tx.setting.findUnique({where:{key:'competition:move:'+exception.date}});
+ const downRow=await tx.setting.findUnique({where:{key:'competition:move:manual-m2-'+exception.date}});
+ const upRow=await tx.setting.findUnique({where:{key:'competition:move:manual-m2-up-'+exception.date}});
+ const cycle=cycleRow?JSON.parse(cycleRow.value):null;
+ const downRecord=downRow?JSON.parse(downRow.value):null;
+ const upRecord=upRow?JSON.parse(upRow.value):null;
  const from=direction==='up'?'M2':'M2+',to=direction==='up'?'M2+':'M2';
- const alreadyMoved=new Set<string>((exception.changes??[]).map((p:{id:string})=>p.id));
+ const manualRecord=direction==='up'?upRecord:downRecord;
+ if(manualRecord)fail(`A ${direction==='up'?'subida':'descida'} manual já está registada em ${manualRecord.date??exception.date}, com ${(manualRecord.changes??[]).length} jogadores. Consulta Histórico. Não será repetida.`);
+ const automatic=(cycle?.changes??[]).filter((p:{from:string;to:string})=>p.from===from&&p.to===to);
+ if(automatic.length)fail(`O ciclo automático de ${exception.date} já ${direction==='up'?'subiu':'desceu'} ${automatic.length} jogadores de ${from} para ${to}. Não foi uma confirmação manual. Consulta Histórico antes de aplicar mais alterações.`);
+ const downApplied=!!downRecord||!!exception.downApplied||exception.status==='applied-manual'||(cycle?.changes??[]).filter((p:{from:string;to:string})=>p.from==='M2+'&&p.to==='M2').length===20;
+ const upApplied=!!upRecord||!!exception.upApplied;
+ if(direction==='down'?downApplied:upApplied)fail(`O registo desta exceção indica ${direction==='up'?'subidas':'descidas'} já aplicadas, mas falta o detalhe no histórico manual. É necessário verificar o registo antes de repetir a operação.`);
+ if(exception.status==='applied'&&!(cycle?.changes?.length))fail('O estado indica aplicação automática, mas não foi encontrado o histórico desse ciclo. É necessário verificar o registo antes de repetir.');
+ if(!['pending','missed','applied','applied-manual'].includes(exception.status))fail('Estado da exceção desconhecido. É necessário verificar o registo.');
+ // A closed ordinary cycle or a missed exception is not proof of a manual exchange.
+ // Keep all recorded movers out of the candidates, even when the status is incomplete.
+ const recordedChanges=[...(exception.changes??[]),...(downRecord?.changes??[]),...(upRecord?.changes??[]),...(cycle?.changes??[])];
+ const alreadyMoved=new Set<string>(recordedChanges.map((p:{id:string})=>p.id));
  const month=exception.date.slice(0,7);
  if(today.slice(0,7)!==month)fail('Esta troca manual pertence ao ciclo de '+month+'.');
  const blocked=games.some(g=>g.published&&g.division===from&&g.date<=today&&!g.winner)?`Preenche os resultados ${from} em falta antes de confirmar a troca.`:null;
@@ -30,7 +43,7 @@ async function preview(tx:Prisma.TransactionClient,direction:Direction){
  if(eligible.length<20)fail(`São necessários pelo menos 20 jogadores elegíveis no ${from}, sem repetir quem já mudou neste ciclo.`);
  const changes=direction==='up'?eligible.slice(0,20):eligible.slice(-20);
  const revision=(await tx.revision.findUnique({where:{id:1}}))!.value;
- return {exception,month,changes,candidates:eligible,blocked,revision,downApplied,upApplied};
+ return {exception:{...exception,changes:[...new Map(recordedChanges.map((p:{id:string})=>[p.id,p])).values()]},month,changes,candidates:eligible,blocked,revision,downApplied,upApplied};
 }
 export function installManualM2(app:Express,auth:RequestHandler,admin:RequestHandler){
  app.get('/api/admin/competition/manual-m2',auth,admin,async(req,res)=>{const direction=z.enum(['down','up']).parse(req.query?.direction??'down');res.json(await db.$transaction(tx=>preview(tx,direction)));});

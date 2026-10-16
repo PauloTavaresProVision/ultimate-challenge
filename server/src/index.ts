@@ -1,3 +1,4 @@
+import {installManualM2} from './manual-m2.ts';
 import {overallRanking} from '../../lib/overall-ranking.ts';
 import {installRoundMessages} from './round-messages.ts';
 import {installGroupCompose} from './group-compose.ts';
@@ -493,6 +494,7 @@ installCalendar(app, auth, admin);
 installJourneys(app, auth, admin);
 installGroupCompose(app, auth, admin);
 installRoundMessages(app, auth, admin);
+installManualM2(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
   res.json({m2Exception:JSON.parse(rows.find(r=>r.key==='competition:exception:m2-20-2026-10-14')?.value??'null'),months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});

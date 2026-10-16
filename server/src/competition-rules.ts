@@ -7,11 +7,12 @@ export function exceptionalM2Cycle(anchor:string){
  while(cutoff<requested)cutoff=addDays(cutoff,14);
  return cutoff;
 }
-export function movementPlan(players: Player[], games: Game[], cutoff: string, m2Relegations?:20) {
+export function movementPlan(players: Player[], games: Game[], cutoff: string, m2Relegations?:20|'manual-done') {
   const rank = rankings(players, games.filter(g => g.published && g.date < cutoff), addDays(cutoff,-1).slice(0,7));
   const changes: { id: string; name: string; side: string; from: string; to: string; points: number }[] = [];
   const used = new Set<string>();
   for (let i=0;i<divisions.length-1;i++) {
+   if(i===2&&m2Relegations==='manual-done')continue;
    if(i===2&&m2Relegations===20){
     const candidates=rank.filter(p=>p.verified&&p.division==='M2+');
     if(candidates.length<20)throw new Error('A descida excecional exige pelo menos 20 jogadores elegíveis no M2+.');
@@ -41,4 +42,10 @@ export function movementPlan(players: Player[], games: Game[], cutoff: string, m
 export function monthRecord(players: Player[], games: Game[], month: string) {
   const table = rankings(players, games.filter(g => g.published), month).map(({id,name,division,side,points,wins,losses,bonus,birth}) => ({id,name,division,side,points,wins,losses,bonus,birth}));
   return { month, table, champions: divisions.map(division => ({division, player:table.find(p => p.division === division) ?? null})) };
+}
+
+export function manualM2Plan(players:Player[],games:Game[],month:string){
+ const rank=rankings(players,games.filter(g=>g.published),month).filter(p=>p.verified&&p.division==='M2+');
+ if(rank.length<20)throw Error('São necessários pelo menos 20 jogadores ativos e validados no M2+.');
+ return rank.map((p,i)=>({id:p.id,name:p.name,position:i+1,points:p.points,from:'M2+',to:'M2'})).slice(-20);
 }

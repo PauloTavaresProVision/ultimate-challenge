@@ -35,7 +35,8 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
       } else {
         let changes;
         const special=exception.status==='pending'&&event.date===exception.date;
-        try { changes=movementPlan(players,games,event.date,special?20:undefined); } catch(e) { blocked=(e as Error).message; break; }
+        if(special){blocked='A descida dos 20 jogadores M2+ aguarda confirmação manual no backoffice.';break;}
+        try { changes=movementPlan(players,games,event.date,exception.status==='applied-manual'&&event.date===exception.date?'manual-done':undefined); } catch(e) { blocked=(e as Error).message; break; }
         if(games.some(g=>g.date>=event.date && [...g.a,...g.b].some(id=>changes.some(c=>c.id===id)))) { blocked=`A troca de ${event.date} aguarda revisão dos jogos já publicados para depois dessa data.`; break; }
         for(const change of changes) await tx.player.update({where:{id:change.id},data:{division:change.to}});
         players=players.map(p=>({...p,division:(changes.find(c=>c.id===p.id)?.to??p.division) as Player['division']}));

@@ -2366,3 +2366,14 @@ h1 {
 @media(max-width:1200px){.results-board .rm-layout{grid-template-columns:1fr}.results-board .rm-rounds{display:flex;overflow-x:auto}.results-board .rm-rounds button{min-width:220px}}
 @media(max-width:650px){.rb-match{grid-template-columns:1fr;gap:12px}.rb-court{display:flex;justify-content:space-between;gap:8px}.rb-match>button{justify-self:end}.rb-filters{align-items:stretch;flex-direction:column}.rb-filters .rm-search{max-width:none}.rb-teams>div{align-items:start;flex-direction:column;gap:3px}.rb-teams{gap:14px}}
 .overall-ranking{min-width:0}.overall-ranking .table-scroll{width:100%;overflow-x:auto}.overall-ranking table{width:100%;min-width:620px;border-collapse:collapse}.overall-ranking th,.overall-ranking td{padding:14px 18px;text-align:left;border-bottom:1px solid #e0e7eb;font-size:14px}.overall-ranking th{font-size:12px;color:#617581;background:#f3f6f7}.overall-ranking .section-heading p{max-width:65ch}.overall-ranking .info-note{margin:0 20px}.overall-ranking tr.rank-first{background:#eaf4ed}
+
+.ranking-descent-controls{margin:20px;padding:20px;border:1px solid #c9d7de;border-radius:12px;background:#f4f8fa}
+.ranking-descent-controls h3{margin:0 0 8px}.ranking-descent-controls p{max-width:75ch;margin:8px 0}
+.ranking-descent-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px}
+.ranking-descent-selected{background:#fff5df}.ranking-descent-badge{display:block;width:fit-content;margin-top:6px;padding:3px 8px;border-radius:5px;background:#f7e2af;color:#6e4d0d;font-size:12px;font-weight:600}
+.ranking-cycle-position{display:block;margin-top:6px;color:#526976}.ranking-selection-filter{display:flex;align-items:center;gap:10px;margin:16px 24px}
+.overall-ranking input[type=checkbox]{width:20px;height:20px;accent-color:#173d50;cursor:pointer}.overall-ranking input[type=checkbox]:focus-visible{outline:3px solid #658ca1;outline-offset:3px}
+.ranking-descent-dialog{max-height:90dvh;overflow-y:auto}.ranking-descent-names{max-height:45dvh;overflow-y:auto;padding-left:24px;line-height:1.8}
+@media(max-width:600px){.ranking-descent-controls{margin:12px;padding:14px}.ranking-descent-actions>button{width:100%}}
+
+.overall-ranking .rm-search{width:auto;max-width:360px}.ranking-descent-footer{position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 24px;background:#f4f8fa;border-top:1px solid #c9d7de}

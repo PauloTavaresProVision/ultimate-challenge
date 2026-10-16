@@ -22,7 +22,18 @@ test('Manual relegation requires admin, preview revision, applies exactly once a
   await get({},res);assert.equal(plan.changes.length,20);assert.equal(updates,0);
   const input={revision:plan.revision,ids:plan.changes.map((p:any)=>p.id)};
   await assert.rejects(()=>post({body:{...input,revision:0}},res),/mudaram/);assert.equal(updates,0);
-  await post({body:input},res);assert.equal(updates,20);assert.equal(audits,1);assert.equal(JSON.stringify(games),before);
+  await assert.rejects(()=>post({body:{...input,ids:Array(20).fill(input.ids[0])}},res),/diferentes/);
+  await assert.rejects(()=>post({body:{...input,ids:['outsider',...input.ids.slice(1)]}},res),/ativos e validados/);
+  const removed=input.ids[0];
+  const replacement=plan.candidates.find((p:any)=>!input.ids.includes(p.id)).id;
+  const custom={...input,ids:[replacement,...input.ids.slice(1)]};
+  games.push({...games[0],id:'future',date:today.slice(0,7)+'-31',winner:null as any,a:[replacement],b:[]});
+  await assert.rejects(()=>post({body:custom},res),/jogos por realizar/);assert.equal(updates,0);
+  games.pop();
+  await post({body:custom},res);
+  assert.equal(players.find(p=>p.id===removed)?.division,'M2+');
+  assert.equal(players.find(p=>p.id===replacement)?.division,'M2');
+assert.equal(updates,20);assert.equal(audits,1);assert.equal(JSON.stringify(games),before);
   assert.equal(JSON.parse(settings.get(key)!).status,'applied-manual');
   await assert.rejects(()=>post({body:input},res),/repetida/);assert.equal(updates,20);
  }finally{db.$transaction=original;await db.$disconnect();}

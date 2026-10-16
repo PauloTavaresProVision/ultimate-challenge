@@ -627,7 +627,7 @@ export default function WorkspaceViews({
           </div>
         </section>
       )}
-      {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games)} division={division}/>}
+      {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games)} division={division} manageRelegation={live}/>}
       {view === 'Classificação' && (
         <>
           {archiveError&&<p className="form-error" role="alert">Não foi possível consultar o histórico: {archiveError}</p>}

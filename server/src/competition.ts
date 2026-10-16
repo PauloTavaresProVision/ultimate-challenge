@@ -19,7 +19,7 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
       const date=exceptionalM2Cycle(anchor);
       await save(exceptionKey,{date,count:20,mode:'last-overall',status:known.has('competition:move:'+date)?'missed':'pending'});
     }
-    const exception=JSON.parse(known.get(exceptionKey)!) as {date:string;count:number;mode:string;status:string};
+    const exception=JSON.parse(known.get(exceptionKey)!) as {date:string;count:number;mode:string;status:string;upApplied?:boolean};
     const events: {date:string;type:'month'|'move';key:string;month?:string}[]=[];
     for(let date=addDays(anchor,14);date<=today;date=addDays(date,14)) if(!known.has('competition:move:'+date)) events.push({date,type:'move',key:'competition:move:'+date});
     let month=anchor.slice(0,7);
@@ -34,8 +34,8 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
         await tx.audit.create({data:{actor:'system',action:`Mês ${event.month} encerrado. Campeões e classificação guardados; novo mês a zero.`}});
       } else {
         let changes;
-        const special=exception.status==='pending'&&event.date===exception.date;
-        if(special){blocked='A descida dos 20 jogadores M2+ aguarda confirmação manual no backoffice.';break;}
+        const special=(exception.status==='pending'||(exception.status==='applied-manual'&&!exception.upApplied))&&event.date===exception.date;
+        if(special){blocked='As 20 descidas M2+ e 20 subidas M2 aguardam confirmação manual no Ranking geral.';break;}
         try { changes=movementPlan(players,games,event.date,exception.status==='applied-manual'&&event.date===exception.date?'manual-done':undefined); } catch(e) { blocked=(e as Error).message; break; }
         if(games.some(g=>g.date>=event.date && [...g.a,...g.b].some(id=>changes.some(c=>c.id===id)))) { blocked=`A troca de ${event.date} aguarda revisão dos jogos já publicados para depois dessa data.`; break; }
         for(const change of changes) await tx.player.update({where:{id:change.id},data:{division:change.to}});

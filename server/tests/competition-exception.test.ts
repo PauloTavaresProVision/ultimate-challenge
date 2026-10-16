@@ -20,7 +20,7 @@ test('Cycle exception remains pending while results are missing, waits for manua
   winner='a';await runCompetition('2026-10-20');
   assert.equal(JSON.parse(settings.get(key)!).status,'pending');assert.equal(updates,0);
   assert.match(JSON.parse(settings.get('competition:status')!).blocked,/manual/);
-  settings.set(key,JSON.stringify({...JSON.parse(settings.get(key)!),status:'applied-manual'}));
+  settings.set(key,JSON.stringify({...JSON.parse(settings.get(key)!),status:'applied-manual',upApplied:true}));
   await runCompetition('2026-10-20');
   const record=JSON.parse(settings.get('competition:move:2026-10-20')!);
   assert.equal(record.changes.filter((p:any)=>p.from==='M2+'&&p.to==='M2').length,0);

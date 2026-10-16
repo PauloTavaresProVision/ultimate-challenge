@@ -10,7 +10,7 @@ test('Manual relegation requires admin, preview revision, applies exactly once a
  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
  const key='competition:exception:m2-20-2026-10-14';
  const settings=new Map([[key,JSON.stringify({date:today,count:20,status:'pending'})]]);
- const players=Array.from({length:24},(_,i)=>({id:'p'+i,name:'Player '+i,birth:new Date(Date.UTC(1960+i,0,1)),division:'M2+',side:'Esquerda',status:'Ativo',verified:true}));
+ const players=Array.from({length:48},(_,i)=>({id:'p'+i,name:'Player '+i,birth:new Date(Date.UTC(1960+i,0,1)),division:i<24?'M2+':'M2',side:'Esquerda',status:'Ativo',verified:true}));
  let revision=1,updates=0,audits=0;
  const games=[{id:'g',date:today,published:true,winner:'a',division:'M2+',a:['p0','p1'],b:['p2','p3'],courtId:'c',time:'20:00',round:1}];
  const before=JSON.stringify(games);
@@ -34,7 +34,37 @@ test('Manual relegation requires admin, preview revision, applies exactly once a
   assert.equal(players.find(p=>p.id===removed)?.division,'M2+');
   assert.equal(players.find(p=>p.id===replacement)?.division,'M2');
 assert.equal(updates,20);assert.equal(audits,1);assert.equal(JSON.stringify(games),before);
-  assert.equal(JSON.parse(settings.get(key)!).status,'applied-manual');
+  assert.equal(JSON.parse(settings.get(key)!).status,'pending');
+  assert.equal(JSON.parse(settings.get(key)!).downApplied,true);
   await assert.rejects(()=>post({body:input},res),/repetida/);assert.equal(updates,20);
+  await get({query:{direction:'up'}},res);
+  assert.equal(plan.changes.length,20);
+  assert.ok(plan.candidates.every((p:any)=>!custom.ids.includes(p.id)));
+  assert.equal(plan.changes[0].id,'p24');
+  const promote={direction:'up',revision:plan.revision,ids:plan.changes.map((p:any)=>p.id)};
+  await assert.rejects(()=>post({body:{...promote,ids:[custom.ids[0],...promote.ids.slice(1)]}},res),/ativos e validados/);
+  // Compatibility with the previous release, which completed only the downward leg.
+  const oldRecord=JSON.parse(settings.get(key)!);delete oldRecord.downApplied;delete oldRecord.upApplied;oldRecord.status='applied-manual';settings.set(key,JSON.stringify(oldRecord));
+  settings.set('competition:move:'+today,'{}');
+  await post({body:promote},res);
+  assert.equal(updates,40);assert.equal(audits,2);
+  assert.equal(JSON.parse(settings.get(key)!).status,'applied-manual');
+  assert.equal(JSON.parse(settings.get(key)!).upApplied,true);
+  assert.equal(JSON.parse(settings.get(key)!).changes.length,40);
+  await assert.rejects(()=>post({body:promote},res),/repetida/);
+  assert.equal(updates,40);assert.equal(JSON.stringify(games),before);
+  // The opposite order must work too, without selecting newly promoted players to descend.
+  settings.clear();settings.set(key,JSON.stringify({date:today,count:20,status:'pending'}));
+  players.forEach((p,i)=>p.division=i<24?'M2+':'M2');
+  await get({query:{direction:'up'}},res);
+  const firstUp={direction:'up',revision:plan.revision,ids:plan.changes.map((p:any)=>p.id)};
+  await post({body:firstUp},res);
+  assert.equal(JSON.parse(settings.get(key)!).status,'pending');
+  await get({},res);
+  assert.ok(plan.candidates.every((p:any)=>!firstUp.ids.includes(p.id)));
+  const thenDown={revision:plan.revision,ids:plan.changes.map((p:any)=>p.id)};
+  await post({body:thenDown},res);
+  assert.equal(JSON.parse(settings.get(key)!).status,'applied-manual');
+  assert.equal(updates,80);
  }finally{db.$transaction=original;await db.$disconnect();}
 });

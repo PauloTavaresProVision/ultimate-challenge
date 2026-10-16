@@ -1,3 +1,4 @@
+import {cycleRankings} from '../lib/competition-cycle';
 'use client';
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
@@ -211,11 +212,11 @@ export default function Backoffice({
   const availableMonths = [...new Set([currentMonth, month, ...games.map(g => g.date.slice(0,7))])]
     .filter(value => /^\d{4}-\d{2}$/.test(value)).sort().reverse();
   const monthLabel = (value: string) => new Date(value + '-15T12:00:00').toLocaleDateString('pt-PT', {month:'long',year:'numeric'});
-  const showMonth = ['Visão geral','Classificação','Rondas e sorteios','Jogos e resultados','Histórico'].includes(view);
+  const showMonth = ['Ranking geral','Visão geral','Classificação','Rondas e sorteios','Jogos e resultados','Histórico'].includes(view);
   const monthGames = games.filter(g => g.date.startsWith(month));
   const pending = players.filter((p) => p.status === 'Pendente');
   const active = players.filter((p) => p.status === 'Ativo');
-  const ranks = rankings(players, games.filter(g => g.published), month);
+  const ranks = month===currentMonth?cycleRankings(players,games):rankings(players, games.filter(g => g.published), month);
   const leaders = divisions.map((d) => ranks.find((p) => p.division === d));
   return (
     <SidebarProvider>
@@ -290,7 +291,7 @@ export default function Backoffice({
               </select>
               <Badge tone="neutral">{month === currentMonth ? 'Mês atual' : 'Mês em consulta'}</Badge>
               {month !== currentMonth && <Button variant="ghost" onClick={() => setMonth(currentMonth)}>Voltar ao mês atual</Button>}
-            </div> : <div className="period">{view === 'Ranking geral' && <strong>Todos os meses · acumulado</strong>}</div>}
+            </div> : <div className="period">{view === 'Ranking geral' && <strong>Pontos acumulados no mês</strong>}</div>}
             <div className="division-filters">
               {['Todas', ...divisions].map((d) => (
                 <button

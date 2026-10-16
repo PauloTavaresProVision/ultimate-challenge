@@ -3,7 +3,7 @@ import {useManualM2,ManualM2Controls} from './manual-m2';
 import {useState} from 'react';
 import type {OverallRankingRow} from '../lib/overall-ranking';
 
-export default function OverallRanking({rows,division='Todas',playerId,manageRelegation=false}:{rows:OverallRankingRow[];division?:string;playerId?:string;manageRelegation?:boolean}){
+export default function OverallRanking({rows,division='Todas',playerId,manageRelegation=false,month}:{rows:OverallRankingRow[];division?:string;playerId?:string;manageRelegation?:boolean;month?:string}){
  const managing=manageRelegation&&division!=='Todas';
  const manual=useManualM2(managing,division);
  const [onlySelected,setOnlySelected]=useState(false);
@@ -11,8 +11,8 @@ export default function OverallRanking({rows,division='Todas',playerId,manageRel
  const scoped=rows.filter(p=>division==='Todas'||p.division===division).map((p,i)=>({...p,position:division==='Todas'?p.position:i+1}));
  const visible=scoped.filter(p=>!managing||!onlySelected||manual.selected.includes(p.id)).filter(p=>p.name.toLocaleLowerCase('pt').includes(search.toLocaleLowerCase('pt')));
  return <section className="panel data-panel ranking-panel overall-ranking">
-  <div className="section-heading"><div><h2>{division==='Todas'?'Ranking geral':`Ranking acumulado · ${division}`} · todos os meses</h2><p>Pontos acumulados dos jogos publicados, incluindo vitórias, derrotas e bónus. Não reinicia no fim do mês.</p></div></div>
-  <div className="info-note">{division==='Todas'?'Posição entre todos os níveis. O nível mostrado é o atual.':`Posição dentro do ${division}, com os pontos acumulados de todos os meses.`} Os pontos acumulados não alteram a classificação mensal. As mudanças de nível são decididas pelo administrador.</div>
+  <div className="section-heading"><div><h2>{division==='Todas'?'Ranking geral':`Ranking acumulado · ${division}`} · {month}</h2><p>Pontos acumulados dos jogos publicados, incluindo vitórias, derrotas e bónus. Recomeça a zero no início de cada mês.</p></div></div>
+  <div className="info-note">{division==='Todas'?'Posição entre todos os níveis. O nível mostrado é o atual.':`Posição dentro do ${division}, com os pontos acumulados neste mês.`} Este ranking soma o mês completo. A classificação quinzenal recomeça a cada ciclo.</div>
   {manageRelegation&&division==='Todas'&&<p className="info-note">Escolhe um nível acima para selecionar jogadores e alterar o nível de destino.</p>}
   {managing&&<ManualM2Controls state={manual}/>}
   {managing&&manual.plan&&<label className="ranking-selection-filter"><input type="checkbox" checked={onlySelected} onChange={e=>setOnlySelected(e.target.checked)}/>Mostrar apenas selecionados ({manual.selected.length})</label>}

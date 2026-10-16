@@ -21,7 +21,7 @@ export const defaultRules: PublicRules = {
     },
     {
       "title": "Subidas e descidas",
-      "text": "A cada duas semanas, sobe o melhor pontuado de esquerda e o melhor de direita; descem o pior pontuado de cada lado, entre divisões adjacentes. Quem está em M1+ não sobe mais e quem está em M2 não desce mais. Os jogadores mantêm os pontos acumulados ao mudar de divisão."
+      "text": "A cada duas semanas, os 4 últimos do M1+ descem para M1 e os 4 primeiros do M1 sobem para M1+, independentemente do lado. M2+ e M2 são geridos manualmente pela organização. Os pontos da classificação do ciclo recomeçam a zero a cada 14 dias. O Ranking geral acumula os pontos do mês completo e recomeça a zero no primeiro dia do mês seguinte."
     },
     {
       "title": "Campeões do mês",
@@ -37,3 +37,7 @@ export const defaultRules: PublicRules = {
     }
   ]
 };
+
+export function currentPublicRules(rules:PublicRules):PublicRules{
+ return {...rules,sections:rules.sections.map(section=>section.text==='A cada duas semanas, sobe o melhor pontuado de esquerda e o melhor de direita; descem o pior pontuado de cada lado, entre divisões adjacentes. Quem está em M1+ não sobe mais e quem está em M2 não desce mais. Os jogadores mantêm os pontos acumulados ao mudar de divisão.'?{...section,text:defaultRules.sections.find(s=>s.title==='Subidas e descidas')!.text}:section)};
+}

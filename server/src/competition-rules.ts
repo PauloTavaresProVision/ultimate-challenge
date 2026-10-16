@@ -49,3 +49,11 @@ export function manualM2Plan(players:Player[],games:Game[],month:string){
  if(rank.length<20)throw Error('São necessários pelo menos 20 jogadores ativos e validados no M2+.');
  return rank.map((p,i)=>({id:p.id,name:p.name,position:i+1,points:p.points,from:'M2+',to:'M2'})).slice(-20);
 }
+
+// Only M1+ and M1 exchange automatically. M2+ and M2 remain manual.
+export function fourPlayerMovementPlan(players:Player[],games:Game[],start:string,cutoff:string){
+ const rank=rankings(players,games.filter(g=>g.published&&g.date>=start&&g.date<cutoff),'').filter(p=>p.verified);
+ const upper=rank.filter(p=>p.division==='M1+'),lower=rank.filter(p=>p.division==='M1');
+ if(upper.length<4||lower.length<4)throw Error('São necessários pelo menos 4 jogadores elegíveis em M1+ e M1 para efetuar as trocas.');
+ return [...upper.slice(-4).map(p=>({id:p.id,name:p.name,from:'M1+',to:'M1',points:p.points})),...lower.slice(0,4).map(p=>({id:p.id,name:p.name,from:'M1',to:'M1+',points:p.points}))];
+}

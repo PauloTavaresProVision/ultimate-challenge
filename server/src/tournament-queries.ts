@@ -1,7 +1,8 @@
+import {cycleRankings,competitionCycle} from '../../lib/competition-cycle.ts';
 import {db} from './db.ts';
 import {publicCalendar} from './public-calendar.ts';
 import {rankings,type Player} from '../../lib/tournament.ts';
-import {defaultRules} from '../../lib/public-rules.ts';
+import {defaultRules,currentPublicRules} from '../../lib/public-rules.ts';
 import {vacancies,todayLuanda} from './substitutions.ts';
 import type {Query} from './tournament-assistant.ts';
 export async function queryTournament(playerId:string,q:Query){
@@ -12,7 +13,7 @@ export async function queryTournament(playerId:string,q:Query){
  const matches=people.filter(p=>(division==='all'||p.division===division)&&p.name.toLocaleLowerCase().includes(q.name.toLocaleLowerCase()));
  const page=(rows:unknown[])=>({total:rows.length,offset:q.offset,items:rows.slice(q.offset,q.offset+50),hasMore:rows.length>q.offset+50});
  if(q.topic==='players')return page(matches.map(({id,...p})=>({...p,isYou:id===playerId})));
- if(q.topic==='rules'){const row=await db.setting.findUnique({where:{key:'public-rules'}});return {rules:row?JSON.parse(row.value).rules:defaultRules,weeklyCalendar:await publicCalendar()};}
+ if(q.topic==='rules'){const row=await db.setting.findUnique({where:{key:'public-rules'}});return {rules:row?currentPublicRules(JSON.parse(row.value).rules):defaultRules,weeklyCalendar:await publicCalendar()};}
  if(q.topic==='courts')return page(await db.court.findMany({where:{active:true},select:{name:true,location:true}}));
  if(q.topic==='competition'){const row=await db.setting.findUnique({where:{key:'competition:status'}});return row?JSON.parse(row.value):{status:'Ainda não definido'};}
  if(q.topic==='substitutions')return page((await vacancies()).filter(v=>(division==='all'||v.division===division)&&v.status==='pending').map(v=>({name:v.name,division:v.division,side:v.side,round:v.round,date:v.date,status:v.status,candidates:v.candidates.map(id=>people.find(p=>p.id===id)?.name??'Jogador')})));
@@ -26,7 +27,9 @@ export async function queryTournament(playerId:string,q:Query){
  }
  const month=(q.from||todayLuanda()).slice(0,7);
  if(month!==todayLuanda().slice(0,7))return {error:'Classificação histórica não disponível nesta consulta. Não uses a classificação atual como histórica.'};
- const players=await db.player.findMany();const games=await db.game.findMany({where:{published:true,date:{startsWith:month}}});
- const table=rankings(players.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],month);
- return page(table.filter(p=>matches.some(m=>m.id===p.id)).map(p=>({name:p.name,division:p.division,side:p.side,position:table.filter(other=>other.division===p.division).findIndex(other=>other.id===p.id)+1,points:p.points,wins:p.wins,losses:p.losses,bonus:p.bonus,isYou:p.id===playerId})));
+ const players=await db.player.findMany();const games=await db.game.findMany({where:{published:true}});
+ const anchorRow=await db.setting.findUnique({where:{key:'competition:anchor'}});
+ const anchor=anchorRow?JSON.parse(anchorRow.value):undefined;
+ const table=cycleRankings(players.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],todayLuanda(),anchor);
+ return {period:competitionCycle(games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],todayLuanda(),anchor),...page(table.filter(p=>matches.some(m=>m.id===p.id)).map(p=>({name:p.name,division:p.division,side:p.side,position:table.filter(other=>other.division===p.division).findIndex(other=>other.id===p.id)+1,points:p.points,wins:p.wins,losses:p.losses,bonus:p.bonus,isYou:p.id===playerId})))};
 }

@@ -1,3 +1,4 @@
+import {cycleRankings,competitionCycle,luandaToday} from '../lib/competition-cycle';
 import OverallRanking from './overall-ranking';
 import {overallRanking} from '../lib/overall-ranking';
 import ResultsBoard from './results-board';
@@ -258,7 +259,8 @@ export default function WorkspaceViews({
         .toLocaleLowerCase('pt')
         .includes(search.toLocaleLowerCase('pt')),
   );
-  const rank = archive?.table??rankings(players,games.filter(g=>g.published),month);
+  const cycle=competitionCycle(games,luandaToday());
+  const rank = archive?.table??(month===activeMonth?cycleRankings(players,games):rankings(players,games.filter(g=>g.published),month));
   const name = (id: string) =>
     players.find((p) => p.id === id)?.name ?? 'Jogador removido';
   const teams = (g: Game, team: 'a' | 'b') => g[team].map(name).join(' / ');
@@ -627,7 +629,7 @@ export default function WorkspaceViews({
           </div>
         </section>
       )}
-      {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games)} division={division} manageRelegation={live}/>}
+      {view === 'Ranking geral' && <OverallRanking rows={overallRanking(players,games,month)} month={month} division={division} manageRelegation={live&&month===activeMonth}/>}
       {view === 'Classificação' && (
         <>
           {archiveError&&<p className="form-error" role="alert">Não foi possível consultar o histórico: {archiveError}</p>}
@@ -654,7 +656,7 @@ export default function WorkspaceViews({
                     </Badge>{' '}
                     Classificação individual
                   </h2>
-                  <span className="muted">{month} · {archiveLoading?'A consultar…':archive?'Classificação final':month<activeMonth?'Por fechar':'Provisória'}</span>
+                  <span className="muted">{month} · {archiveLoading?'A consultar…':archive?'Classificação final':month<activeMonth?'Por fechar':`Ciclo ${cycle.start} a ${cycle.end}`}</span>
                 </div>
                 <Table>
                   <TableHeader>

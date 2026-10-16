@@ -10,7 +10,7 @@ async function preview(tx:Prisma.TransactionClient,from:string){
  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Luanda'}).format(new Date());
  const games=(await tx.game.findMany()).map(g=>({...g,court:g.courtId})) as Game[];
  const players=(await tx.player.findMany()).map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[];
- const candidates=rankings(players,games.filter(g=>g.published),'').filter(p=>p.division===from).map((p,i)=>({id:p.id,name:p.name,position:i+1,points:p.points,scheduled:games.some(g=>!g.winner&&g.date>=today&&[...g.a,...g.b].includes(p.id))}));
+ const candidates=rankings(players,games.filter(g=>g.published),today.slice(0,7)).filter(p=>p.division===from).map((p,i)=>({id:p.id,name:p.name,position:i+1,points:p.points,scheduled:games.some(g=>!g.winner&&g.date>=today&&[...g.a,...g.b].includes(p.id))}));
  return {from,candidates,revision:(await tx.revision.findUnique({where:{id:1}}))!.value};
 }
 export function installManualM2(app:Express,auth:RequestHandler,admin:RequestHandler){

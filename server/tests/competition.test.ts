@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {movementPlan,monthRecord,addDays,exceptionalM2Cycle,manualM2Plan} from '../src/competition-rules.ts';
+import {movementPlan,monthRecord,addDays,exceptionalM2Cycle,manualM2Plan,fourPlayerMovementPlan} from '../src/competition-rules.ts';
 import {rankings,type Player,type Game} from '../../lib/tournament.ts';
 const players:Player[]=['M1+','M1','M2+','M2'].flatMap((division,d)=>Array.from({length:4},(_,i)=>({id:`p${d}${i}`,name:`Player ${d}${i}`,phone:`+244900000${d}${i}`,birth:`${1980+i}-01-01`,side:i%2?'Direita':'Esquerda',division:division as Player['division'],status:'Ativo',verified:true,note:''})));
 const games:Game[]=['M1+','M1','M2+','M2'].map((division,d)=>({id:`g${d}`,division:division as Game['division'],a:[`p${d}0`,`p${d}1`],b:[`p${d}2`,`p${d}3`],court:'c',round:1,date:'2026-09-01',time:'18:00',duration:90,winner:'a',published:true}));
@@ -49,4 +49,16 @@ test('Manual M2 selects bottom 20 across sides and keeps original ranking positi
  assert.throws(()=>manualM2Plan(roster.slice(0,19),[],'2026-10'),/pelo menos 20/);
  assert.equal(movementPlan(players,games,'2026-09-15','manual-done').filter(p=>p.to==='M2'||p.from==='M2').length,0);
  assert.equal(movementPlan(players,games,'2026-09-15','manual-done').length,8);
+});
+
+test('Four each way use the fortnight across sides and exclude both M2 levels',()=>{
+ const roster=['M1+','M1','M2+','M2'].flatMap((division,d)=>Array.from({length:8},(_,i)=>({...players[0],id:`q${d}-${i}`,name:`Q${d}-${i}`,division:division as Player['division'],birth:`${1960+i}-01-01`,side:'Esquerda' as const})));
+ const current:Game={...games[0],date:'2026-10-13',a:['q0-7','q1-7'],b:['q0-6','q1-6'],winner:'a'};
+ const old:Game={...current,id:'old',date:'2026-10-01',a:['q0-0','q1-0']};
+ const moves=fourPlayerMovementPlan(roster,[current,old],'2026-10-06','2026-10-20');
+ assert.equal(moves.length,8);assert.equal(new Set(moves.map(m=>m.id)).size,8);
+ assert.ok(moves.every(m=>!['M2','M2+'].includes(m.from)&&!['M2','M2+'].includes(m.to)));
+ assert.ok(moves.some(m=>m.id==='q1-7'&&m.to==='M1+'));
+ assert.ok(!moves.some(m=>m.id==='q0-7'));
+ assert.throws(()=>fourPlayerMovementPlan(roster.filter(p=>p.division!=='M1'),[],'2026-10-06','2026-10-20'),/4 jogadores/);
 });

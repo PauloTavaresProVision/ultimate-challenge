@@ -158,19 +158,6 @@ export function installAdminState(
           bad(
             'A alteração do número exige nova validação e está indisponível nesta etapa.',
           );
-        if (
-          old &&
-          old.division !== p.division &&
-          (await tx.game.count({
-            where: {
-              OR: [{ a: { has: p.id } }, { b: { has: p.id } }],
-              winner: { not: null },
-            },
-          }))
-        )
-          bad(
-            'As mudanças de divisão com pontos são feitas automaticamente a cada duas semanas.',
-          );
         if (p.status === 'Rejeitado' && !p.note.trim())
           bad('Indica o motivo da rejeição.');
         const { id, ...fields } = p;

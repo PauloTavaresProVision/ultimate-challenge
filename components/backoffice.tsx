@@ -37,6 +37,7 @@ import AgentTools from '@/components/agent-tools';
 import WhatsAppLive, {api} from '@/components/whatsapp-live';
 import type { Player, Court, Game } from '@/lib/tournament';
 export type LiveState = {
+  period?:{today:string;anchor?:string;closed?:import('../lib/competition-cycle').CycleClosure};
   players: Player[];
   courts: Court[];
   games: Game[];
@@ -142,6 +143,7 @@ export default function Backoffice({
   liveState?: LiveState;
   onSave?: (state: LiveState) => Promise<LiveState>;
 } = {}) {
+  const [period,setPeriod]=useState(liveState?.period);
   const [audit, setAudit] = useState<string[]>(liveState?.audit ?? []);
   const [view, setView] = useState('Visão geral');
   const [players, setPlayers] = useState(liveState?.players ?? initialPlayers);
@@ -165,7 +167,7 @@ export default function Backoffice({
       try{
         const next=await api<LiveState>('/admin/state');
         if(!active||saveLock.current||editing.current||epoch!==saveEpoch.current)return;
-        setSyncError(false);
+        setSyncError(false);setPeriod(next.period);
         if(next.revision>currentRevision.current){
           currentRevision.current=next.revision;
           setPlayers(next.players);setCourts(next.courts);setGames(next.games);setAudit(next.audit);setRevision(next.revision);
@@ -216,7 +218,7 @@ export default function Backoffice({
   const monthGames = games.filter(g => g.date.startsWith(month));
   const pending = players.filter((p) => p.status === 'Pendente');
   const active = players.filter((p) => p.status === 'Ativo');
-  const ranks = month===currentMonth?cycleRankings(players,games):rankings(players, games.filter(g => g.published), month);
+  const ranks = month===currentMonth?cycleRankings(players,games,period?.today,period?.anchor,period?.closed):rankings(players, games.filter(g => g.published), month);
   const leaders = divisions.map((d) => ranks.find((p) => p.division === d));
   return (
     <SidebarProvider>

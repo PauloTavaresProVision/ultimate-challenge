@@ -1,3 +1,4 @@
+import {competitionPeriod} from './competition-period.ts';
 import {cycleRankings,competitionCycle} from '../../lib/competition-cycle.ts';
 import {db} from './db.ts';
 import {publicCalendar} from './public-calendar.ts';
@@ -28,8 +29,7 @@ export async function queryTournament(playerId:string,q:Query){
  const month=(q.from||todayLuanda()).slice(0,7);
  if(month!==todayLuanda().slice(0,7))return {error:'Classificação histórica não disponível nesta consulta. Não uses a classificação atual como histórica.'};
  const players=await db.player.findMany();const games=await db.game.findMany({where:{published:true}});
- const anchorRow=await db.setting.findUnique({where:{key:'competition:anchor'}});
- const anchor=anchorRow?JSON.parse(anchorRow.value):undefined;
- const table=cycleRankings(players.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],todayLuanda(),anchor);
- return {period:competitionCycle(games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],todayLuanda(),anchor),...page(table.filter(p=>matches.some(m=>m.id===p.id)).map(p=>({name:p.name,division:p.division,side:p.side,position:table.filter(other=>other.division===p.division).findIndex(other=>other.id===p.id)+1,points:p.points,wins:p.wins,losses:p.losses,bonus:p.bonus,isYou:p.id===playerId})))};
+ const {today,anchor,closed}=await competitionPeriod();
+ const table=cycleRankings(players.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],today,anchor,closed);
+ return {period:competitionCycle(games.map(g=>({...g,court:g.courtId})) as Parameters<typeof rankings>[1],today,anchor,closed),...page(table.filter(p=>matches.some(m=>m.id===p.id)).map(p=>({name:p.name,division:p.division,side:p.side,position:table.filter(other=>other.division===p.division).findIndex(other=>other.id===p.id)+1,points:p.points,wins:p.wins,losses:p.losses,bonus:p.bonus,isYou:p.id===playerId})))};
 }

@@ -17,5 +17,12 @@ test('New automatic policy starts next cycle, exchanges four each way once and l
   assert.ok(players.filter(p=>p.id.startsWith('p2')).every(p=>p.division==='M2+'));assert.ok(players.filter(p=>p.id.startsWith('p3')).every(p=>p.division==='M2'));
   await runCompetition('2026-10-20');assert.equal(updates,8);
   assert.ok(!settings.has('competition:move:2026-10-06'));
+  settings.set('competition:move:2026-10-20',JSON.stringify({...record,date:'2026-10-16',scheduledCutoff:'2026-10-20'}));
+  await runCompetition('2026-10-19');assert.equal(updates,8);
+  assert.equal(JSON.parse(settings.get('competition:status')!).nextMovement,'2026-11-03');
+  await runCompetition('2026-10-20');assert.equal(updates,8);
+  games.push({...games[0],id:'early-cycle-pending',date:'2026-10-17',winner:null});
+  await runCompetition('2026-11-03');assert.equal(updates,8);
+  assert.match(JSON.parse(settings.get('competition:status')!).blocked,/resultados/);
  }finally{db.$transaction=original;await db.$disconnect();}
 });

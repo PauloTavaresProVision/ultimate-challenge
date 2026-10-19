@@ -211,12 +211,13 @@ export default function WorkspaceViews({
   const editMonth=games.find(g=>g.id===editGame?.id)?.date.slice(0,7)??month;
   const monthEnd=new Date(Number(editMonth.slice(0,4)),Number(editMonth.slice(5)),0).getDate();
   type ArchiveRow=Pick<Player,'id'|'name'|'division'|'side'>&{points:number;wins:number;losses:number;bonus:number};
+  const [period,setPeriod]=useState<{today:string;anchor?:string;closed?:import('../lib/competition-cycle').CycleClosure}>();
   const [archives,setArchives]=useState<{month:string;table:ArchiveRow[]}[]>([]);
   const [archiveLoading,setArchiveLoading]=useState(false),[archiveError,setArchiveError]=useState('');
   useEffect(()=>{
     if(!live||!['Classificação','Jogos e resultados','Rondas e sorteios'].includes(view))return;
     let active=true;setArchiveLoading(true);
-    const load=()=>api<{months:{month:string;table:ArchiveRow[]}[]}>('/admin/competition').then(d=>{if(active){setArchives(d.months);setArchiveError('');}}).catch(e=>{if(active)setArchiveError(e.message);}).finally(()=>{if(active)setArchiveLoading(false);});
+    const load=()=>api<{period:NonNullable<typeof period>;months:{month:string;table:ArchiveRow[]}[]}>('/admin/competition').then(d=>{if(active){setArchives(d.months);setPeriod(d.period);setArchiveError('');}}).catch(e=>{if(active)setArchiveError(e.message);}).finally(()=>{if(active)setArchiveLoading(false);});
     void load();const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);};
   },[live,view]);
   const archive=archives.find(a=>a.month===month);
@@ -259,8 +260,8 @@ export default function WorkspaceViews({
         .toLocaleLowerCase('pt')
         .includes(search.toLocaleLowerCase('pt')),
   );
-  const cycle=competitionCycle(games,luandaToday());
-  const rank = archive?.table??(month===activeMonth?cycleRankings(players,games):rankings(players,games.filter(g=>g.published),month));
+  const cycle=competitionCycle(games,period?.today??luandaToday(),period?.anchor,period?.closed);
+  const rank = archive?.table??(month===activeMonth?cycleRankings(players,games,period?.today,period?.anchor,period?.closed):rankings(players,games.filter(g=>g.published),month));
   const name = (id: string) =>
     players.find((p) => p.id === id)?.name ?? 'Jogador removido';
   const teams = (g: Game, team: 'a' | 'b') => g[team].map(name).join(' / ');

@@ -1,3 +1,4 @@
+import {competitionPeriod} from './competition-period.ts';
 import {installManualM2} from './manual-m2.ts';
 import {overallRanking,overallRankingMonths} from '../../lib/overall-ranking.ts';
 import {installRoundMessages} from './round-messages.ts';
@@ -166,6 +167,7 @@ async function snapshot() {
     db.audit.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }),
   ]);
   return {
+    period:await competitionPeriod(),
     players: players.map(publicPlayer),
     courts,
     games: games.map(({ courtId, ...g }) => ({ ...g, court: courtId, absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId) })),
@@ -456,8 +458,7 @@ app.get('/api/games', auth, async (_req, res) => {
   const archived=await db.setting.findMany({where:{key:{startsWith:'competition:month:'}},orderBy:{key:'desc'},take:24});
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const month=today.slice(0,7);
-  const anchorRow=await db.setting.findUnique({where:{key:'competition:anchor'}});
-  const period={today,anchor:anchorRow?JSON.parse(anchorRow.value):undefined};
+  const period=await competitionPeriod();
   const standings=playerStandings(s.playerId,rankingPlayers.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Game[],month,archived.map(r=>JSON.parse(r.value)),period);
   const monthlyRankings=overallRankingMonths(rankingPlayers.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Game[],month);
   res.json({ playerId: s.playerId, standings, overallRankingMonths:monthlyRankings, overallRankingMonth:month, overallRanking:overallRanking(rankingPlayers.map(p=>({...p,birth:p.birth.toISOString().slice(0,10)})) as Player[],games.map(g=>({...g,court:g.courtId})) as Game[],month), people, games:games.map(g=>({...g,absentIds:pending.filter(v=>v.gameIds.includes(g.id)).map(v=>v.playerId)})) });
@@ -501,7 +502,7 @@ installRoundMessages(app, auth, admin);
 installManualM2(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});
-  res.json({m2Exception:JSON.parse(rows.find(r=>r.key==='competition:exception:m2-20-2026-10-14')?.value??'null'),months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});
+  res.json({period:await competitionPeriod(),m2Exception:JSON.parse(rows.find(r=>r.key==='competition:exception:m2-20-2026-10-14')?.value??'null'),months:rows.filter(r=>r.key.startsWith('competition:month:')).map(r=>JSON.parse(r.value)),movements:rows.filter(r=>r.key.startsWith('competition:move:')).map(r=>JSON.parse(r.value)),status:JSON.parse(rows.find(r=>r.key==='competition:status')?.value??'null'),anchor:JSON.parse(rows.find(r=>r.key==='competition:anchor')?.value??'null')});
 });
 app.use(express.static(resolve('web')));
 app.get('/{*path}', (_req, res) => res.sendFile(resolve('web/index.html')));

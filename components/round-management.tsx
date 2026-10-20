@@ -1,3 +1,4 @@
+import RoundCourts from './round-courts';
 import {useEffect,useState,type ReactNode} from 'react';
 import {CalendarDays,Users,Trophy,History} from 'lucide-react';
 import {managementRounds} from '../lib/round-management';
@@ -34,8 +35,8 @@ export default function RoundManagement({games,players,courts,calendar,division,
           <header className="rm-heading"><div><p>RONDA {current.round} · {date(current.date)}</p><h2>{current.division} <span>{current.draft?'Rascunho':current.past?'Histórico':'Jogos publicados'}</span></h2><p>{current.past?'Consulta os jogos desta ronda. Para registar ou corrigir resultados, abre Jogos e resultados.':current.draft?'Podes alterar os jogadores antes de publicar.':'As alterações aos jogadores atualizam os quatro jogos.'}</p></div>{!current.past&&current.draft&&<Button disabled={saving||current.games.some(g=>g.absentIds?.length)} onClick={()=>publish(current.games)}>Publicar {current.division}</Button>}</header>
           {!current.draft&&!current.past&&<RoundMessage key={current.id} round={current.round} date={current.date} division={current.division} blocked={current.games.some(g=>!!g.absentIds?.length)}/>}
           {current.games.some(g=>g.absentIds?.length)&&<p className="rm-warning">Há saídas por resolver. Escolhe os suplentes antes de publicar ou registar resultados.</p>}
-          {!current.past&&<nav className="rm-detail-tabs" aria-label="Detalhe da jornada"><button aria-pressed={detail==='players'} onClick={()=>setDetail('players')}><Users size={16}/>Jogadores e substituições</button><button aria-pressed={detail==='games'} onClick={()=>setDetail('games')}><Trophy size={16}/>Jogos · {current.games.length}</button></nav>}
-          {!current.past&&detail==='players'?<Substitutions round={current.round} date={current.date} division={current.division}/>:<div className="games-grid">{current.games.map(renderGame)}</div>}
+          {!current.past&&<nav className="rm-detail-tabs" aria-label="Detalhe da jornada"><button aria-pressed={detail==='players'} onClick={()=>setDetail('players')}><Users size={16}/>Jogadores e substituições</button><button aria-pressed={detail==='games'} onClick={()=>setDetail('games')}><Trophy size={16}/>Jogos · {current.games.length}</button><button aria-pressed={detail==='courts'} onClick={()=>setDetail('courts')}>Campos</button></nav>}
+          {!current.past&&detail==='courts'?<RoundCourts games={current.games} courts={courts}/>:!current.past&&detail==='players'?<Substitutions round={current.round} date={current.date} division={current.division}/>:<div className="games-grid">{current.games.map(renderGame)}</div>}
         </section>
       </div>}
     </>}

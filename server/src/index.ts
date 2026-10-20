@@ -1,3 +1,4 @@
+import {installRoundCourts} from './round-courts.ts';
 import {competitionPeriod} from './competition-period.ts';
 import {installManualM2} from './manual-m2.ts';
 import {overallRanking,overallRankingMonths} from '../../lib/overall-ranking.ts';
@@ -499,6 +500,7 @@ installCalendar(app, auth, admin);
 installJourneys(app, auth, admin);
 installGroupCompose(app, auth, admin);
 installRoundMessages(app, auth, admin);
+installRoundCourts(app, auth, admin);
 installManualM2(app, auth, admin);
 app.get('/api/admin/competition', auth, admin, async (_req,res) => {
   const rows=await db.setting.findMany({where:{key:{startsWith:'competition:'}},orderBy:{key:'desc'}});

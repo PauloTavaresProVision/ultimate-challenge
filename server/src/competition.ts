@@ -44,7 +44,7 @@ export async function runCompetition(today = new Date().toLocaleDateString('en-C
       }
       changed=true;
     }
-    await save('competition:status',{checkedAt:new Date().toISOString(),blocked,nextMovement:events.find(e=>e.type==='move'&&!known.has(e.key))?.date??competitionCycle(games,today,anchor,latestCycleClosure([...known].map(([key,value])=>({key,value})))).next,manualMovements:false,manualDivisions:['M2+','M2']});
+    await save('competition:status',{checkedAt:new Date().toISOString(),blocked,nextMovement:events.find(e=>e.type==='move'&&!known.has(e.key))?.date??competitionCycle(games,today,anchor,latestCycleClosure([...known].map(([key,value])=>({key,value})))).next,manualMovements:false,manualDivisions:['M2+']});
     if(changed) await tx.revision.update({where:{id:1},data:{value:{increment:1}}});
   },{timeout:20000});
 }

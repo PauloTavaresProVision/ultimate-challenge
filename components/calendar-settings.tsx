@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {api} from './whatsapp-live';
 import {Button} from './ui/button';
 import {Input} from './ui/input';
-import {divisions} from '../lib/tournament';
+import {activeDivisions as divisions} from '../lib/tournament';
 import {weekdayNames,type WeeklyCalendar} from '../lib/weekly-calendar';
 export default function CalendarSettings(){
  const [data,setData]=useState<WeeklyCalendar|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[note,setNote]=useState('');

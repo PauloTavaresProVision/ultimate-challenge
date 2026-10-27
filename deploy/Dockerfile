@@ -17,6 +17,7 @@ RUN npm ci
 COPY server/prisma ./prisma
 COPY server/prisma.config.ts ./
 COPY server/src ./src
+COPY server/merge-m2.mjs ./merge-m2.mjs
 COPY server/tsconfig.json ./
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN DATABASE_URL=postgresql://build:build@localhost/escada npm run db:generate

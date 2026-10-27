@@ -87,8 +87,10 @@ export async function handleJourney(
       );
       let choices = all.filter((j) => j.status === 'open');
       const code = /jornada\s+([a-f0-9]+)/i.exec(text)?.[1];
-      if(decision?.journeyId&&!quotedId)choices=all.filter(j=>j.id===decision.journeyId);
-      else if (code&&!decision) choices = all.filter((j) => j.id === code);
+      const requestedId=decision?.journeyId??code;
+      const canonicalId=requestedId ? (await tx.setting.findUnique({where:{key:'journey-alias:'+requestedId}}))?.value??requestedId : undefined;
+      if(decision?.journeyId&&!quotedId)choices=all.filter(j=>j.id===canonicalId);
+      else if (code&&!decision) choices = all.filter((j) => j.id === canonicalId);
       else if (quotedId) {
         const reference = await resolveJourneyReference(tx,group,quotedId,all);
         choices = all.filter(j=>j.id===reference);
@@ -186,7 +188,7 @@ export function installJourneys(
     const input = z
       .object({
         id: z.string().regex(/^[a-f0-9]{12}$/),
-        division: z.enum(['M1+', 'M1', 'M2+', 'M2']),
+        division: z.enum(['M1+', 'M1', 'M2+']),
         date: z.iso.date(),
         time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
         capacity: z.number().int().min(8).max(200).multipleOf(4),
@@ -335,8 +337,16 @@ export function installJourneys(
             ...g,
             court: g.courtId,
           }));
-          if (courtIds.some((id) => !j!.courtIds.includes(id)))
+          if (!j!.mergedFrom?.length && courtIds.some((id) => !j!.courtIds.includes(id)))
             fail('Usa os campos desta jornada.');
+          if(j!.mergedFrom?.length){
+            const start=Date.parse(j!.date+'T'+j!.time+':00+01:00');
+            const reserved=(await listJourneys(tx)).some(other=>{
+              const otherStart=Date.parse(other.date+'T'+other.time+':00+01:00');
+              return other.id!==j!.id&&other.status!=='drawn'&&Math.abs(otherStart-start)<80*60000&&other.courtIds.some(id=>courtIds.includes(id));
+            });
+            if(reserved)fail('Um dos campos está reservado para outra jornada nesse horário. Escolhe outro campo.');
+          }
           const result = prepareDivisionDraw(
             { ...j!, sides, courtIds },
             players as Player[],

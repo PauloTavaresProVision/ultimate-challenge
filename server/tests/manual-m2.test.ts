@@ -15,14 +15,15 @@ test('Manual level management ignores old cycles, supports any count and repeate
  let plan:any;const res={locals:{session:{adminId:'admin'}},json:(v:any)=>plan=v};
  try{
   await get({query:{from:'M2+'}},res);assert.equal(plan.candidates.length,25);assert.equal(updates,0);
-  const one={from:'M2+',to:'M2',revision:plan.revision,ids:['p0']};
+  const one={from:'M2+',to:'M1',revision:plan.revision,ids:['p0']};
   await assert.rejects(()=>post({body:{...one,to:'M2+'}},res),/destino diferente/);
   await assert.rejects(()=>post({body:{...one,ids:['p0','p0']}},res),/repetidos/);
   await assert.rejects(()=>post({body:{...one,ids:['unknown']}},res),/já não está ativo/);
-  await post({body:one},res);assert.equal(players[0].division,'M2');assert.equal(updates,1);
+  await assert.rejects(()=>post({body:{...one,to:'M2'}},res),/Invalid option/);
+  await post({body:one},res);assert.equal(players[0].division,'M1');assert.equal(updates,1);
   await assert.rejects(()=>post({body:one},res),/dados mudaram/);assert.equal(updates,1);
-  await get({query:{from:'M2'}},res);assert.equal(plan.candidates.length,1);
-  await post({body:{from:'M2',to:'M1+',revision:plan.revision,ids:['p0']}},res);assert.equal(players[0].division,'M1+');
+  await get({query:{from:'M1'}},res);assert.equal(plan.candidates.length,1);
+  await post({body:{from:'M1',to:'M1+',revision:plan.revision,ids:['p0']}},res);assert.equal(players[0].division,'M1+');
   await get({query:{from:'M2+'}},res);
   await post({body:{from:'M2+',to:'M1',revision:plan.revision,ids:plan.candidates.map((p:any)=>p.id)}},res);assert.equal(plan.count,24);
   await get({query:{from:'M1'}},res);

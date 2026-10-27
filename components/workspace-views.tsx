@@ -79,6 +79,7 @@ import {
 import { Badge, Avatar } from '@/components/backoffice';
 import {
   divisions,
+  activeDivisions,
   rankings,
   conflict,
   type Player,
@@ -1041,7 +1042,7 @@ export default function WorkspaceViews({
                 <Field label="Divisão">
                   <Choice
                     label="Divisão do jogador"
-                    options={[...divisions]}
+                    options={[...activeDivisions]}
                     value={editPlayer.division}
                     onChange={(v) =>
                       setEditPlayer({ ...editPlayer, division: v as Division })

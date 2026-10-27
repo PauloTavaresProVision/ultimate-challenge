@@ -20,7 +20,7 @@ const player = z.object({
       (v) => v >= '1900-01-01' && v < new Date().toISOString().slice(0, 10),
     ),
   side: z.enum(['Esquerda', 'Direita']),
-  division: z.enum(['M1+', 'M1', 'M2+', 'M2']),
+  division: z.enum(['M1+', 'M1', 'M2+']),
   status: z.enum(['Ativo', 'Inativo', 'Pendente', 'Rejeitado']),
   verified: z.boolean(),
   note: z.string().max(500),

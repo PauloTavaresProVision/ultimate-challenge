@@ -16,7 +16,7 @@ async function preview(tx:Prisma.TransactionClient,from:string){
 export function installManualM2(app:Express,auth:RequestHandler,admin:RequestHandler){
  app.get('/api/admin/competition/manual-divisions',auth,admin,async(req,res)=>{const from=divisionSchema.parse(req.query.from);res.json(await db.$transaction(tx=>preview(tx,from)));});
  app.post('/api/admin/competition/manual-divisions',auth,admin,async(req,res)=>{
-  const input=z.object({from:divisionSchema,to:divisionSchema,revision:z.number().int(),ids:z.array(z.string()).min(1).max(1000)}).parse(req.body);
+  const input=z.object({from:divisionSchema,to:z.enum(['M1+','M1','M2+']),revision:z.number().int(),ids:z.array(z.string()).min(1).max(1000)}).parse(req.body);
   if(input.from===input.to)fail('Escolhe um nível de destino diferente.');
   const result=await db.$transaction(async tx=>{
    await tx.$queryRaw`SELECT id FROM "Revision" WHERE id = 1 FOR UPDATE`;

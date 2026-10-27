@@ -5,7 +5,7 @@ export const defaultRules: PublicRules = {
   "sections": [
     {
       "title": "Participação e divisões",
-      "text": "A inscrição é por convite, com validação do WhatsApp e aprovação da organização. Existem quatro divisões: M1+, M1, M2+ e M2. Cada jogador indica se joga à esquerda ou à direita."
+      "text": "A inscrição é por convite, com validação do WhatsApp e aprovação da organização. Existem três divisões: M1+, M1 e M2+. Cada jogador indica se joga à esquerda ou à direita."
     },
     {
       "title": "A ronda da semana",
@@ -21,11 +21,11 @@ export const defaultRules: PublicRules = {
     },
     {
       "title": "Subidas e descidas",
-      "text": "A cada duas semanas, os 4 últimos do M1+ descem para M1 e os 4 primeiros do M1 sobem para M1+, independentemente do lado. M2+ e M2 são geridos manualmente pela organização. Os pontos da classificação do ciclo recomeçam a zero a cada 14 dias. O Ranking geral acumula os pontos do mês completo e recomeça a zero no primeiro dia do mês seguinte."
+      "text": "A cada duas semanas, os 4 últimos do M1+ descem para M1 e os 4 primeiros do M1 sobem para M1+, independentemente do lado. M2+ é gerido manualmente pela organização. Os pontos da classificação do ciclo recomeçam a zero a cada 14 dias. O Ranking geral acumula os pontos do mês completo e recomeça a zero no primeiro dia do mês seguinte."
     },
     {
       "title": "Campeões do mês",
-      "text": "Há quatro campeões: o jogador com mais pontos de M1+, o de M1, o de M2+ e o de M2, independentemente do lado. Em caso de empate, vence o mais velho. Depois de apurados os campeões, o novo mês começa com os pontos a zero e o histórico fica guardado."
+      "text": "Há três campeões: o jogador com mais pontos de M1+, o de M1, o de M2+, independentemente do lado. Em caso de empate, vence o mais velho. Depois de apurados os campeões, o novo mês começa com os pontos a zero e o histórico fica guardado."
     },
     {
       "title": "Registo de resultados",
@@ -39,5 +39,10 @@ export const defaultRules: PublicRules = {
 };
 
 export function currentPublicRules(rules:PublicRules):PublicRules{
+ rules={...rules,sections:rules.sections.map(section=>({...section,text:section.text
+  .replace('quatro divisões: M1+, M1, M2+ e M2','três divisões: M1+, M1 e M2+')
+  .replace('M2+ e M2 são geridos manualmente','M2+ é gerido manualmente')
+  .replace('quatro campeões','três campeões').replace('o de M2+ e o de M2','o de M2+')
+ }))};
  return {...rules,sections:rules.sections.map(section=>section.text==='A cada duas semanas, sobe o melhor pontuado de esquerda e o melhor de direita; descem o pior pontuado de cada lado, entre divisões adjacentes. Quem está em M1+ não sobe mais e quem está em M2 não desce mais. Os jogadores mantêm os pontos acumulados ao mudar de divisão.'?{...section,text:defaultRules.sections.find(s=>s.title==='Subidas e descidas')!.text}:section)};
 }

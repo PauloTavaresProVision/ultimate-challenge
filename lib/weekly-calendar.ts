@@ -5,7 +5,7 @@ export type RoundCalendar = Record<Division,{date:string;time:string;enabled?:bo
 export const weekdayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 // The former shared time is retained when upgrading to division calendars.
 export function normalizeCalendar(raw?: {time?:string;divisions?:WeeklyCalendar['divisions']}|null):WeeklyCalendar {
-  return {divisions:Object.fromEntries(divisions.map(d=>[d,raw?.divisions?.[d]??{weekday:d==='M1+'||d==='M1'?2:3,time:raw?.time??'18:00'}])) as WeeklyCalendar['divisions']};
+  return {divisions:Object.fromEntries(divisions.map(d=>[d,{...(raw?.divisions?.[d]??{weekday:d==='M1+'||d==='M1'?2:3,time:raw?.time??'18:00'}),...(d==='M2'?{enabled:false}:{})}])) as WeeklyCalendar['divisions']};
 }
 const shift=(date:string,n:number)=>new Date(Date.parse(date+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
 export function nextRoundCalendar(calendar:WeeklyCalendar,games:Game[],today:string):RoundCalendar {

@@ -9,7 +9,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
-  divisions,
+  activeDivisions as divisions,
   type Division,
   type Player,
   type Court,

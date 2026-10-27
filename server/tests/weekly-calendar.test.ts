@@ -17,8 +17,8 @@ test('Two-day rounds retain four games per pair and share courts without overlap
  const courts=[{id:'c1',name:'1',location:'Club',active:true},{id:'c2',name:'2',location:'Club',active:true}];
  const calendar=nextRoundCalendar(normalizeCalendar(),[],'2026-09-07');
  const games=scheduleDivisions(pairs,courts,1,calendar);
- assert.equal(games.length,16);
- for(const d of divisions){assert.equal(games.filter(g=>g.division===d).length,4);assert(games.filter(g=>g.division===d).every(g=>g.date===calendar[d].date));}
+ assert.equal(games.length,12);
+ for(const d of divisions.filter(d=>d!=='M2')){assert.equal(games.filter(g=>g.division===d).length,4);assert(games.filter(g=>g.division===d).every(g=>g.date===calendar[d].date));}
  assert(!games.some(g=>conflict(g,games)));
  assert.equal(games.find(g=>g.division==='M1')?.time,'19:20');
  assert.equal(games.find(g=>g.division==='M2+')?.time,'18:00');

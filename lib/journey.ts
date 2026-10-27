@@ -5,6 +5,7 @@ export type Journey = {
   time: string;
   capacity: number;
   courtIds: string[];
+  mergedFrom?: string[];
   group: string;
   status: 'open' | 'closed' | 'drawn';
   confirmed: string[];

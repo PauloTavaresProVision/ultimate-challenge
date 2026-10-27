@@ -21,6 +21,7 @@ export function prepareDivisionDraw(
   games: Game[],
   rng = Math.random,
 ) {
+  if(plan.division==='M2')throw Error('M2 foi integrado no M2+. Seleciona M2+.');
   const selected = Object.entries(plan.sides).map(([id, side]) => {
     const p = players.find((p) => p.id === id);
     if (

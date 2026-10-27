@@ -15,7 +15,7 @@ import {
 import DrawDialog from './draw-dialog';
 import type { Journey } from '../lib/journey';
 import {
-  divisions,
+  activeDivisions as divisions,
   type Player,
   type Court,
   type Game,
@@ -348,7 +348,7 @@ export default function Journeys({
           journey={selected}
           calendar={calendar}
           players={players.filter((p) => selected.confirmed.includes(p.id))}
-          courts={courts.filter((c) => selected.courtIds.includes(c.id))}
+          courts={courts.filter((c) => selected.mergedFrom?.length ? c.active : selected.courtIds.includes(c.id))}
           games={games}
           live
           onClose={() => setSelected(null)}

@@ -20,7 +20,7 @@ const player = z.object({
       (v) => v >= '1900-01-01' && v < new Date().toISOString().slice(0, 10),
     ),
   side: z.enum(['Esquerda', 'Direita']),
-  division: z.enum(['M1+', 'M1', 'M2+']),
+  division: z.enum(['M1+', 'M1', 'M2+', 'M2']),
   status: z.enum(['Ativo', 'Inativo', 'Pendente', 'Rejeitado']),
   verified: z.boolean(),
   note: z.string().max(500),
@@ -53,6 +53,16 @@ const stateSchema = z.object({
 const bad = (msg: string): never => {
   throw Object.assign(new Error(msg), { status: 400 });
 };
+export function parseAdminState(body:unknown){
+  const parsed=stateSchema.safeParse(body);
+  if(parsed.success)return parsed.data;
+  const labels:Record<string,string>={players:'Jogadores',games:'Jogos',courts:'Campos de jogo',division:'nível',birth:'data de nascimento',phone:'WhatsApp',name:'nome',date:'data',time:'hora',round:'ronda',duration:'duração',revision:'versão dos dados'};
+  const details=parsed.error.issues.slice(0,4).map(issue=>issue.path.map(part=>typeof part==='number'?`registo ${part+1}`:labels[String(part)]??String(part)).join(' → '));
+  return bad('Não foi possível guardar. Verifica: '+details.join('; ')+'.');
+}
+export function validateRetiredDivision(player:{division:string},existing?:{division:string}){
+  if(player.division==='M2'&&existing?.division!=='M2')bad('M2 foi integrado no M2+. Não é possível colocar novos jogadores em M2.');
+}
 export function installAdminState(
   app: Express,
   auth: RequestHandler,
@@ -73,7 +83,7 @@ export function installAdminState(
     res.json({ok:true});
   });
   app.put('/api/admin/state', auth, admin, async (req, res) => {
-    const data = stateSchema.parse(req.body);
+    const data = parseAdminState(req.body);
     for (const records of [data.players, data.courts, data.games])
       if (new Set(records.map((x) => x.id)).size !== records.length)
         bad('Identificadores duplicados.');
@@ -150,6 +160,7 @@ export function installAdminState(
       }
       for (const p of data.players) {
         const old = existing.find((o) => o.id === p.id);
+        validateRetiredDivision(p,old);
         if (p.verified !== !!old?.verified)
           bad('A validação do WhatsApp só pode ser feita por código.');
         if (p.status === 'Ativo' && !old?.verified)

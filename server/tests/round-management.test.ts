@@ -47,11 +47,12 @@ test('Admin replacement supports drafts and published games, synchronizes roster
  for(const h of routes.values()){assert.equal(h[0],auth);assert.equal(h[1],admin);}
  const replace=routes.get('POST /api/admin/substitutions/replace')!.at(-1);
  const original=db.$transaction;
- for(const scenario of ['draft','published','scoped','result','past','conflict','closed','forbidden']){
+ for(const scenario of ['draft','published','scoped','legacy','ambiguous','result','past','conflict','closed','forbidden']){
   const date=scenario==='past'?'2000-01-01':todayLuanda();
   const players=[{id:'out',name:'Pedro',side:'Esquerda',division:'M1+',verified:true,status:'Ativo'},{id:'in',name:scenario==='forbidden'?'Sérgio Vieira':'HP',side:'Esquerda',division:'M1+',verified:true,status:'Ativo'},{id:'partner',name:scenario==='forbidden'?'Ivo Guilherme Rêgo':'Partner',side:'Direita',division:'M1+',verified:true,status:'Ativo'}];
   let games=Array.from({length:4},(_,i)=>({id:'g'+i,round:3,date,division:'M1+',published:scenario==='published',winner:scenario==='result'&&i===0?'a':null,duration:20,a:['out','partner'],b:['x','y']}));
-  if(scenario==='scoped')games.push(...games.map(g=>({...g,id:'old-'+g.id,date:'2000-01-01',division:'M1',published:true})));
+  if(['scoped','legacy'].includes(scenario))games.push(...games.map(g=>({...g,id:'old-'+g.id,date:'2000-01-01',division:'M1',published:true})));
+  if(scenario==='ambiguous')games.push(...games.map(g=>({...g,id:'other-'+g.id,date:'2099-01-01'})));
   let settings=new Map<string,string>([['whatsapp_group','group'],['journey:j',JSON.stringify({id:'j',division:'M1+',date,confirmed:['out','partner','x','y'],waiting:['in'],status:'drawn'})]]);
   if(scenario==='closed')settings.set('competition:month:'+date.slice(0,7),'{}');
   let notices=0;
@@ -59,19 +60,19 @@ test('Admin replacement supports drafts and published games, synchronizes roster
    $executeRaw:async()=>{},revision:{update:async()=>{}},audit:{create:async()=>{}},outbox:{create:async()=>{notices++;}},
    setting:{findMany:async({where}:any)=>[...settings].filter(([key])=>key.startsWith(where.key.startsWith)).map(([key,value])=>({key,value})),findUnique:async({where}:any)=>settings.has(where.key)?{value:settings.get(where.key)}:null,create:async({data}:any)=>{settings.set(data.key,data.value);},update:async({where,data}:any)=>{settings.set(where.key,data.value);}},
    player:{findUnique:async({where}:any)=>players.find(p=>p.id===where.id)},
-   game:{findMany:async({where}:any)=>games.filter(g=>where.id?where.id.in.includes(g.id):g.round===where.round&&(!where.date||g.date===where.date)&&(!where.division||g.division===where.division)),count:async()=>scenario==='conflict'?1:0,update:async({where,data}:any)=>{games=games.map(g=>g.id===where.id?{...g,...data}:g);}},
+   game:{findMany:async({where}:any)=>games.filter(g=>where.id?where.id.in.includes(g.id):g.round===where.round&&(!where.date||(typeof where.date==='string'?g.date===where.date:g.date>=where.date.gte))&&(!where.division||g.division===where.division)),count:async()=>scenario==='conflict'?1:0,update:async({where,data}:any)=>{games=games.map(g=>g.id===where.id?{...g,...data}:g);}},
   };
   db.$transaction=(async(fn:any)=>{const beforeGames=structuredClone(games),beforeSettings=new Map(settings);try{return await fn(tx);}catch(e){games=beforeGames;settings=beforeSettings;throw e;}}) as any;
   try{
-   const run=()=>replace({body:{round:3,date,division:'M1+',playerId:'out',substituteId:'in'}},{json:()=>{}});
-   if(['draft','published','scoped'].includes(scenario)){
+   const run=()=>replace({body:{round:3,...(['legacy','ambiguous'].includes(scenario)?{}:{date,division:'M1+'}),playerId:'out',substituteId:'in'}},{json:()=>{}});
+   if(['draft','published','scoped','legacy'].includes(scenario)){
     await run();assert.equal(games.filter(g=>g.a[0]==='in').length,4);
     const journey=JSON.parse(settings.get('journey:j')!);assert.ok(journey.confirmed.includes('in'));assert.ok(!journey.confirmed.includes('out'));assert.deepEqual(journey.waiting,[]);
     assert.equal(notices,scenario==='published'?1:0);
     assert.equal(games.filter(g=>!g.id.startsWith('old-')).every(g=>g.published===(scenario==='published')),true);
-    if(scenario==='scoped')assert.equal(games.filter(g=>g.id.startsWith('old-')&&g.a[0]==='out').length,4);
+    if(['scoped','legacy'].includes(scenario))assert.equal(games.filter(g=>g.id.startsWith('old-')&&g.a[0]==='out').length,4);
    }else{
-    await assert.rejects(run);assert.equal(games.filter(g=>g.a[0]==='out').length,4);assert.equal([...settings.keys()].some(k=>k.startsWith('absence:')),false);assert.equal(notices,0);
+    await assert.rejects(run);assert.equal(games.filter(g=>g.a[0]==='out').length,scenario==='ambiguous'?8:4);assert.equal([...settings.keys()].some(k=>k.startsWith('absence:')),false);assert.equal(notices,0);
    }
   }finally{db.$transaction=original;}
  }

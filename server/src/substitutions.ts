@@ -14,6 +14,12 @@ export async function vacancies(tx:Prisma.TransactionClient=db){return (await tx
 async function notice(tx:Prisma.TransactionClient,text:string){const group=await tx.setting.findUnique({where:{key:'whatsapp_group'}});if(group)await tx.outbox.create({data:{recipient:group.value,kind:'substitution',encryptedBody:encrypt(text,config.MESSAGE_KEY),expiresAt:new Date(Date.now()+86400000)}});}
 async function lock(tx:Prisma.TransactionClient){await tx.revision.update({where:{id:1},data:{value:{increment:1}}});}
 async function mark(tx:Prisma.TransactionClient,playerId:string,round:number,sourceId?:string,allowDraft=false,announce=true,scope?:{date:string;division:string}){
+ if(allowDraft&&!scope){
+  const candidates=await tx.game.findMany({where:{round,date:{gte:todayLuanda()},OR:[{a:{has:playerId}},{b:{has:playerId}}]}});
+  const sessions=[...new Map(candidates.map(g=>[g.date+'|'+g.division,{date:g.date,division:g.division}])).values()];
+  if(sessions.length!==1)fail(sessions.length?'Este jogador tem mais de uma jornada nesta ronda. Atualiza a página e escolhe a data e o nível.':'Não foram encontrados jogos atuais para este jogador nesta ronda. Atualiza a lista.');
+  scope=sessions[0];
+ }
  const existing=(await vacancies(tx)).find(v=>v.playerId===playerId&&v.round===round&&v.status==='pending'&&(!scope||(v.date===scope.date&&v.division===scope.division)));if(existing)return existing;
  const p=await tx.player.findUnique({where:{id:playerId}});if(!p||!p.verified||p.status!=='Ativo')fail('Jogador não elegível.');
  const games=await tx.game.findMany({where:{round,...scope,...(!allowDraft?{published:true}:{}),OR:[{a:{has:playerId}},{b:{has:playerId}}]}});
@@ -69,10 +75,10 @@ async function adminLock(tx:Prisma.TransactionClient){await tx.$executeRaw`SELEC
 export async function approveVacancy(id:string,substituteId:string){return db.$transaction(async tx=>{await adminLock(tx);return approveInTransaction(tx,id,substituteId);});}
 export function installSubstitutions(app:Express,auth:RequestHandler,admin:RequestHandler){
  app.get('/api/admin/substitutions',auth,admin,async(_req,res)=>{res.json({vacancies:await vacancies(),players:await db.player.findMany({where:{status:'Ativo',verified:true},select:{id:true,name:true,side:true,division:true}}),games:await db.game.findMany({where:{date:{gte:todayLuanda()}},select:{round:true,date:true,division:true,published:true,winner:true,a:true,b:true}})});});
- app.post('/api/admin/substitutions',auth,admin,async(req,res)=>{const input=z.object({playerId:z.string(),round:z.number().int().positive(),date:z.iso.date(),division:z.enum(['M1+','M1','M2+','M2'])}).parse(req.body);res.json(await db.$transaction(async tx=>{await adminLock(tx);return mark(tx,input.playerId,input.round,undefined,true,true,{date:input.date,division:input.division});}));});
+ app.post('/api/admin/substitutions',auth,admin,async(req,res)=>{const input=z.object({playerId:z.string(),round:z.number().int().positive(),date:z.iso.date().optional(),division:z.enum(['M1+','M1','M2+','M2']).optional()}).parse(req.body);res.json(await db.$transaction(async tx=>{await adminLock(tx);return mark(tx,input.playerId,input.round,undefined,true,true,input.date&&input.division?{date:input.date,division:input.division}:undefined);}));});
  app.post('/api/admin/substitutions/replace',auth,admin,async(req,res)=>{
-  const input=z.object({playerId:z.string(),substituteId:z.string(),round:z.number().int().positive(),date:z.iso.date(),division:z.enum(['M1+','M1','M2+','M2'])}).parse(req.body);
-  res.json(await db.$transaction(async tx=>{await adminLock(tx);const v=await mark(tx,input.playerId,input.round,undefined,true,false,{date:input.date,division:input.division});return approveInTransaction(tx,v.id,input.substituteId);}));
+  const input=z.object({playerId:z.string(),substituteId:z.string(),round:z.number().int().positive(),date:z.iso.date().optional(),division:z.enum(['M1+','M1','M2+','M2']).optional()}).parse(req.body);
+  res.json(await db.$transaction(async tx=>{await adminLock(tx);const v=await mark(tx,input.playerId,input.round,undefined,true,false,input.date&&input.division?{date:input.date,division:input.division}:undefined);return approveInTransaction(tx,v.id,input.substituteId);}));
  });
  app.post('/api/admin/substitutions/:id/approve',auth,admin,async(req,res)=>{const {playerId}=z.object({playerId:z.string()}).parse(req.body);res.json(await approveVacancy(String(req.params.id),playerId));});
  app.post('/api/admin/substitutions/:id/cancel',auth,admin,async(req,res)=>{res.json(await db.$transaction(async tx=>{await lock(tx);const v=(await vacancies(tx)).find(v=>v.id===req.params.id);if(!v||v.status!=='pending')fail('Vaga indisponível.');v!.status='cancelled';await tx.setting.update({where:{key:'absence:'+v!.id},data:{value:JSON.stringify(v)}});if(await tx.game.count({where:{id:{in:v!.gameIds},published:true}}))await notice(tx,`A organização cancelou a ausência de ${v!.name} na ronda ${v!.round}.`);return {ok:true};}));});
